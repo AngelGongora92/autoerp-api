@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from api import auth as auth_router  # Importa el router de autenticación
 from api import users as users_router  # Importa el router de usuarios
@@ -9,6 +10,25 @@ app = FastAPI(
     description="API de prueba para el proyecto de gestión.",
     version="1.0.0",
 )
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://autoerp-fe.vercel.app",
+]
+
+# PASO 3: Añade el middleware a tu aplicación
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Permite los orígenes especificados
+    allow_credentials=True, # Permite cookies (si las usas)
+    allow_methods=["*"],    # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],    # Permite todos los encabezados
+)
+
+
+
+
 
 # Incluye el router de autenticación.
 # El prefijo "/auth" hará que todas las rutas en auth_router
