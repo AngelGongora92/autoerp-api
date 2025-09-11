@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from typing import List
+from.schemas.user import UserCreate
+from . import hashing  # Asegúrate de tener un módulo de hashing para las contr
 
 # Importar las clases de Pydantic desde su nuevo archivo
 from .schemas.user import UserResponse, UserUpdate, PermissionBase
@@ -12,6 +14,63 @@ from .auth import get_db
 
 # --- Creación del Router ---
 router = APIRouter()
+
+
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+):
+    # 1. Verificar si el usuario ya existe
+    existing_user = db.scalars(
+        select(User).where(User.username == user_data.username)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El nombre de usuario ya está en uso"
+        )
+
+    # 2. Hashear la contraseña (¡MUY IMPORTANTE!)
+    hashed_password = hashing.hash_password(user_data.password)
+
+    # 3. Preparar los datos del nuevo usuario
+    new_user = User(
+        username=user_data.username,
+        password=hashed_password, # Guarda la contraseña hasheada
+        is_admin=user_data.is_admin
+    )
+
+    # --- LÓGICA DE PERMISOS ---
+    if user_data.is_admin:
+        # Si es admin, ignora los permisos enviados y asigna TODOS
+        all_permissions = db.scalars(select(Permission)).all()
+        new_user.permissions = list(all_permissions)
+    elif user_data.permissions:
+        # Si no es admin, procesa los permisos enviados (como antes)
+        permission_names = [p.name for p in user_data.permissions]
+        permissions_objs = [
+            db.scalars(select(Permission).where(Permission.name == name)).first() or Permission(name=name)
+            for name in permission_names
+        ]
+        new_user.permissions = permissions_objs
+
+    
+    # 4. Manejar y asignar los permisos
+    if user_data.permissions:
+        permission_names = [p.name for p in user_data.permissions]
+        permissions_objs = [
+            db.scalars(select(Permission).where(Permission.name == name)).first() or Permission(name=name)
+            for name in permission_names
+        ]
+        new_user.permissions = permissions_objs
+
+    # 5. Guardar el nuevo usuario en la base de datos
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -67,32 +126,27 @@ async def update_user(
             detail="Usuario no encontrado"
         )
 
-    # Convertir el modelo Pydantic a un diccionario, excluyendo campos no enviados
     update_data = user_data.model_dump(exclude_unset=True)
-
-    # Extraer los permisos para manejarlos por separado
     permissions_to_update = update_data.pop("permissions", None)
 
-    # 1. Actualizar los campos del usuario (username, is_admin)
+    # 1. Actualizar campos básicos (username, is_admin)
     for key, value in update_data.items():
         setattr(user, key, value)
 
-    # 2. Actualizar los permisos si se proporcionaron
-    if permissions_to_update is not None:
+    # --- LÓGICA DE PERMISOS ---
+    if user.is_admin:
+        # Si el usuario AHORA es admin (después de la actualización), asigna todos los permisos
+        all_permissions = db.scalars(select(Permission)).all()
+        user.permissions = list(all_permissions)
+    elif permissions_to_update is not None:
+        # Si NO es admin y se enviaron permisos, procesa los permisos enviados
         permission_names = [p['name'] for p in permissions_to_update]
-        
-        # Obtenemos todos los permisos necesarios, existentes o no
         permissions_objs = [
             db.scalars(select(Permission).where(Permission.name == name)).first() or Permission(name=name)
             for name in permission_names
         ]
-        
-        # Asignar la lista completa al usuario
         user.permissions = permissions_objs
         
-        db.add(user)
-
-    # 3. Guardar todos los cambios
     db.commit()
     db.refresh(user)
 
