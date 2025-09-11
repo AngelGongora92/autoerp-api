@@ -14,6 +14,12 @@ class UserResponse(BaseModel):
 class PermissionBase(BaseModel):
     name: str
 
+class UserCreate(BaseModel):
+    username: str
+    password: str # Campo obligatorio para un nuevo usuario
+    is_admin: bool = False
+    permissions: List[PermissionBase] = []
+
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     is_admin: Optional[bool] = None
@@ -39,3 +45,5 @@ class CustomerUpdate(BaseModel):
     address1: Optional[str] = None
     address2: Optional[str] = None
     email: str
+
+    
