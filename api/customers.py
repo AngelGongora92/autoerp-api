@@ -25,6 +25,35 @@ async def get_all_customers(
     return customers
 
 
+@router.get("/search", response_model=List[CustomerResponse])
+async def search_customers_by_name(
+    full_name: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Busca clientes por nombre completo (fname y lname).
+    """
+    search_term = f"%{full_name.lower()}%"
+    
+    # Construir la consulta para buscar en fname y lname
+    stmt = select(Customer).where(
+        (Customer.fname.ilike(search_term)) |
+        (Customer.lname.ilike(search_term)) |
+        (Customer.cname.ilike(search_term))
+    )
+    
+    customers = db.scalars(stmt).unique().all()
+    
+    if not customers:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No customers found matching the search criteria"
+        )
+    
+    return customers
+
+
+
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer_by_id(
     customer_id: int,
