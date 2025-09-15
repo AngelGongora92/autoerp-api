@@ -26,6 +26,16 @@ class UserUpdate(BaseModel):
     permissions: Optional[List[PermissionBase]] = None
     model_config = ConfigDict(extra='ignore')
 
+class CustomerCreate(BaseModel):
+    is_company: bool = False
+    cname: Optional[str] = None  # Company name
+    fname: Optional[str] = None  # First name
+    lname: Optional[str] = None  # Last name
+    address1: Optional[str] = None
+    address2: Optional[str] = None
+    email: str  # Campo obligatorio para un nuevo cliente
+    phone: Optional[str] = None
+
 class CustomerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -35,7 +45,8 @@ class CustomerResponse(BaseModel):
     lname: Optional[str] = None  # Last name
     address1: Optional[str] = None
     address2: Optional[str] = None
-    email: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
 class CustomerUpdate(BaseModel):
     is_company: Optional[bool] = None
@@ -44,6 +55,39 @@ class CustomerUpdate(BaseModel):
     lname: Optional[str] = None  # Last name
     address1: Optional[str] = None
     address2: Optional[str] = None
-    email: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
-    
+class CustomerCreate(BaseModel):
+    is_company: bool = False
+    cname: Optional[str] = None  # Company name
+    fname: Optional[str] = None  # First name
+    lname: Optional[str] = None  # Last name
+    address1: Optional[str] = None
+    address2: Optional[str] = None
+    email: str  # Campo obligatorio para un nuevo cliente
+    phone: Optional[str] = None
+
+class ContactCreate(BaseModel):
+    customer_id: int  # ID del cliente al que pertenece el contacto
+    fname: str  # First name
+    lname: str  # Last name
+    email: str  # Email del contacto
+    phone: Optional[str] = None  # Teléfono del contacto
+
+class ContactResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    customer_id: int
+    fname: str
+    lname: str
+    email: str
+    phone: Optional[str] = None
+
+
+
+class ContactUpdate(BaseModel):
+    fname: Optional[str] = None  # First name
+    lname: Optional[str] = None  # Last name
+    email: Optional[str] = None  # Email del contacto
+    phone: Optional[str] = None  # Teléfono del contacto

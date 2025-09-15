@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 
 # Importar las clases de Pydantic desde su nuevo archivo
-from .schemas.user import UserResponse, UserUpdate, PermissionBase, CustomerResponse, CustomerUpdate
+from .schemas.user import UserResponse, UserUpdate, PermissionBase, CustomerResponse, CustomerUpdate, CustomerCreate
 
 # Reutilizamos la dependencia get_db y los modelos
-from .database import User, Permission, Customer
-from .auth import get_db
+from .database import User, Permission, Customer, get_db
+
 
 # --- Creación del Router ---
 router = APIRouter()
@@ -31,27 +31,60 @@ async def search_customers_by_name(
     db: Session = Depends(get_db),
 ):
     """
-    Busca clientes por nombre completo (fname y lname).
+    Busca clientes por nombre completo (concatenando fname y lname) o por nombre de compañía.
     """
     search_term = f"%{full_name.lower()}%"
     
-    # Construir la consulta para buscar en fname y lname
+    # Concatenamos fname y lname para buscar el nombre completo en una sola cadena.
+    # Esto permite búsquedas como "Angel Gongora" aunque estén en campos separados.
+    full_name_db = func.concat(Customer.fname, ' ', Customer.lname)
+    
+    # Construir la consulta para buscar en el nombre completo concatenado o en el nombre de la compañía
     stmt = select(Customer).where(
-        (Customer.fname.ilike(search_term)) |
-        (Customer.lname.ilike(search_term)) |
+        (full_name_db.ilike(search_term)) |
         (Customer.cname.ilike(search_term))
     )
     
     customers = db.scalars(stmt).unique().all()
     
-    if not customers:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No customers found matching the search criteria"
-        )
-    
+    # Nota: Si no se encuentran clientes, se devuelve una lista vacía [], que es la respuesta correcta para una búsqueda sin resultados.
     return customers
 
+
+@router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
+async def create_customer(
+    customer_data: CustomerCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Crea un nuevo customer en la base de datos.
+    """
+    # 1. Verificar si el email ya está en uso
+    existing_customer = db.scalars(
+        select(Customer).where(Customer.email == customer_data.email)
+    ).first()
+    if existing_customer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El email ya está en uso"
+        )
+
+    # 2. Preparar los datos del nuevo customer
+    new_customer = Customer(
+        is_company=customer_data.is_company,
+        cname=customer_data.cname,
+        fname=customer_data.fname,
+        lname=customer_data.lname,
+        address1=customer_data.address1,
+        address2=customer_data.address2,
+        email=customer_data.email,
+        phone=customer_data.phone
+    )
+
+    db.add(new_customer)
+    db.commit()
+    db.refresh(new_customer)
+    return new_customer
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)

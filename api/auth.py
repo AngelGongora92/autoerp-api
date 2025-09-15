@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 # Importa las clases y la sesión desde el nuevo archivo database.py
-from .database import SessionLocal, User, Permission
+from .database import User, Permission, get_db
 
 # Configuración básica de logging
 logging.basicConfig(level=logging.INFO)
@@ -31,17 +31,6 @@ class LoginResponse(BaseModel):
     # En un sistema real, aquí devolverías un token de acceso:
     # access_token: str
     # token_type: str = "bearer"
-
-
-# --- Dependencia de Base de Datos ---
-
-# Define una dependencia para obtener una sesión de la base de datos
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # --- Rutas de Autenticación ---

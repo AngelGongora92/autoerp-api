@@ -16,11 +16,20 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # `declarative_base` es una clase base de la que heredarán los modelos de la base de datos
 Base = declarative_base()
 
+# Define una dependencia para obtener una sesión de la base de datos
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 # --- Modelos de la base de datos ---
 
 # Tabla de asociación para la relación muchos a muchos entre User y Permission
 user_permissions = Table('user_permissions', Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('permission_id', Integer, ForeignKey('permissions.id'), primary_key=True)
 )
 
@@ -60,3 +69,14 @@ class Customer(Base):
     address2 = Column(String(128), nullable=True)
     email = Column(String(128), nullable=False)
     phone = Column(String(32), nullable=True)
+
+
+class Contact(Base):
+    __tablename__ = 'contacts'
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete='CASCADE'), nullable=False)
+    fname = Column(String(64), nullable=True)  # First name
+    lname = Column(String(64), nullable=True)  # Last name
+    email = Column(String(128), nullable=False)
+    phone = Column(String(32), nullable=True)
+    customer = relationship('Customer', backref='contacts')
