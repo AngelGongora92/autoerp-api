@@ -9,8 +9,8 @@ from . import hashing  # Asegúrate de tener un módulo de hashing para las cont
 from .schemas.user import UserResponse, UserUpdate, PermissionBase
 
 # Reutilizamos la dependencia get_db y los modelos
-from .database import User, Permission
-from .auth import get_db
+from .database import User, Permission, get_db
+
 
 # --- Creación del Router ---
 router = APIRouter()
