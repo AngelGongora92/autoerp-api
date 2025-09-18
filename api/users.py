@@ -38,7 +38,9 @@ async def create_user(
     new_user = User(
         username=user_data.username,
         password=hashed_password, # Guarda la contraseña hasheada
-        is_admin=user_data.is_admin
+        is_admin=user_data.is_admin,
+        is_employee=user_data.is_employee,
+        is_active=user_data.is_active
     )
 
     # --- LÓGICA DE PERMISOS ---
@@ -106,7 +108,7 @@ async def get_user_by_id(
     user_with_permissions = db.scalars(
         select(User)
         .options(joinedload(User.permissions))
-        .where(User.id == user_id)
+        .where(User.user_id == user_id)
     ).first()
 
     return user_with_permissions
