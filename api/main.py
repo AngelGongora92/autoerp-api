@@ -23,6 +23,7 @@ origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://autoerp-fe.vercel.app",
+    "https://autoerp-fe.vercel.app/",
 ]
 
 # PASO 3: Añade el middleware a tu aplicación
