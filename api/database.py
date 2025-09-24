@@ -76,6 +76,7 @@ class Customer(Base):
     is_active = Column(Boolean, default=True)
     orders = relationship("Order", back_populates="customer")
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
+    vehicles = relationship("Vehicle", back_populates="customer", cascade="all, delete-orphan")
 
 
 class Contact(Base):
@@ -125,6 +126,10 @@ class Order(Base):
     priority_id = Column(Integer, ForeignKey('priority.priority_id'), nullable=True)
     p_mileage = Column(Integer, nullable=True)  # Presumed mileage
     c_mileage = Column(Integer, nullable=True)  # Current mileage
+    service_bay = Column(String(16), nullable = True)
+    
+    
+
 
     # Relaciones
     advisor = relationship("Employee", foreign_keys=[advisor_id], back_populates="advised_orders")
@@ -174,9 +179,10 @@ class Vehicle(Base):
     v_type_id = Column(Integer, ForeignKey('vehicle_types.v_type_id'), nullable=False)  # Vehicle type (e.g., sedan, SUV)
 
     orders = relationship("Order", back_populates="vehicle")
-    color = relationship("Color", back_populates="vehicles")
-    motor = relationship("Motor", back_populates="vehicles")
-    vehicle_type = relationship("VehicleType", back_populates="vehicles")
+    customer = relationship("Customer", foreign_keys=[customer_id], back_populates="vehicles")
+    color = relationship("Color", foreign_keys=[color_id], back_populates="vehicles")
+    motor = relationship("Motor", foreign_keys=[motor_id], back_populates="vehicles")
+    vehicle_type = relationship("VehicleType", foreign_keys=[v_type_id], back_populates="vehicles")
 
 class Color(Base):
     __tablename__ = 'colors'

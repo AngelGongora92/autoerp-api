@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select
 from .database import get_db, Order
-from .schemas.user import CreateOrder, OrderResponse
+from .schemas.user import CreateOrder, OrderResponse, OrderUpdate
 
 router = APIRouter()
 
@@ -32,6 +32,32 @@ async def create_order(
 
     return new_order
 
+@router.patch("/{order_id}", response_model=OrderResponse)
+async def update_order(
+    order_id: int,
+    order_data: OrderUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Actualiza una orden existente de forma parcial.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # Convierte el modelo Pydantic a un diccionario, excluyendo campos no enviados
+    update_data = order_data.model_dump(exclude_unset=True)
+
+    # Actualiza los campos del objeto de la base de datos
+    for key, value in update_data.items():
+        setattr(order, key, value)
+
+    db.commit()
+    db.refresh(order)
+
+    return order
+
+
 @router.get("/", response_model=List[OrderResponse])
 async def get_all_orders(
     db: Session = Depends(get_db),
@@ -45,14 +71,29 @@ async def get_all_orders(
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
-async def get_order(
+async def get_order_by_id(
     order_id: int,
     db: Session = Depends(get_db),
 ):
     """
-    Obtiene todas las órdenes de la base de datos.
+    Obtiene orden por ID
     """
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@router.get("/customId/{c_order_id}", response_model=OrderResponse)
+async def get_order_by_custom_id(
+    c_order_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene orden por el custom_ID
+    """
+    stmt = select(Order).where(Order.c_order_id == c_order_id)
+    order = db.scalars(stmt).first()
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Order with custom ID '{c_order_id}' not found")
     return order

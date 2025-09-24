@@ -10,9 +10,7 @@ from api import orders as orders_router # Importa el router de órdenes
 from api import vehicles as vehicles_router # Importa el router de vehículos
 
 # --- Creación de Tablas en la Base de Datos ---
-# Esta línea le dice a SQLAlchemy que cree todas las tablas que descienden de `Base`
-# (si no existen ya). Es seguro ejecutarlo en cada inicio.
-Base.metadata.create_all(bind=engine)
+# Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
 
 # Crea la instancia principal de la aplicación FastAPI
 app = FastAPI(
