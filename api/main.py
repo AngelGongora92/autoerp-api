@@ -5,11 +5,12 @@ from api import auth as auth_router  # Importa el router de autenticación
 from api import users as users_router  # Importa el router de usuarios
 from api import customers as customers_router  # Importa el router de clientes
 from api.contacts import router as contacts_router  # Importa el router de contactos
+from api import employees as employees_router # Importa el router de empleados
+from api import orders as orders_router # Importa el router de órdenes
+from api import vehicles as vehicles_router # Importa el router de vehículos
 
 # --- Creación de Tablas en la Base de Datos ---
-# Esta línea le dice a SQLAlchemy que cree todas las tablas que descienden de `Base`
-# (si no existen ya). Es seguro ejecutarlo en cada inicio.
-Base.metadata.create_all(bind=engine)
+# Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
 
 # Crea la instancia principal de la aplicación FastAPI
 app = FastAPI(
@@ -43,6 +44,10 @@ app.include_router(auth_router.router, prefix="/auth", tags=["Autenticación"])
 app.include_router(users_router.router, prefix="/users", tags=["Usuarios"])
 app.include_router(customers_router.router, prefix="/customers", tags=["Clientes"])
 app.include_router(contacts_router, prefix="/contacts", tags=["Contactos"])
+app.include_router(employees_router.router, prefix="/employees", tags=["Empleados"])
+app.include_router(orders_router.router, prefix="/orders", tags=["Órdenes"])
+app.include_router(vehicles_router.router, prefix="/vehicles", tags=["Vehículos"])
+
 
 
 @app.get("/")

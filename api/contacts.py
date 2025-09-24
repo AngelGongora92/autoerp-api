@@ -20,7 +20,7 @@ async def get_contacts_by_customer(
     Obtiene todos los contactos para un cliente específico por su ID.
     """
     # Paso 1: Verificar si el cliente existe en la base de datos.
-    customer = db.scalar(select(Customer).where(Customer.id == customer_id))
+    customer = db.scalar(select(Customer).where(Customer.customer_id == customer_id))
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -43,7 +43,7 @@ async def create_contact(
     Crea un nuevo contacto en la base de datos.
     """
     # Paso 1: Verificar si el cliente existe en la base de datos.
-    customer = db.scalar(select(Customer).where(Customer.id == contact_data.customer_id))
+    customer = db.scalar(select(Customer).where(Customer.customer_id == contact_data.customer_id))
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,7 +67,7 @@ async def create_contact(
     return new_contact
 
 
-@router.get("/{contact_id}", response_model=ContactResponse)
+@router.get("/contact/{contact_id}", response_model=ContactResponse)
 async def get_contact_by_id(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -86,7 +86,7 @@ async def get_contact_by_id(
     
     return contact
 
-@router.put("/{contact_id}", response_model=ContactResponse)
+@router.put("/contact/{contact_id}", response_model=ContactResponse)
 async def update_contact(
     contact_id: int,
     contact_data: ContactCreate,
@@ -105,7 +105,7 @@ async def update_contact(
     
     # Verificar si el nuevo customer_id existe
     if contact_data.customer_id != contact.customer_id:
-        customer = db.scalar(select(Customer).where(Customer.id == contact_data.customer_id))
+        customer = db.scalar(select(Customer).where(Customer.customer_id == contact_data.customer_id))
         if not customer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -124,7 +124,7 @@ async def update_contact(
     
     return contact
 
-@router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/contact/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_contact(
     contact_id: int,
     db: Session = Depends(get_db),
