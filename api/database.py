@@ -167,13 +167,12 @@ class Vehicle(Base):
     vin = Column(String(32), unique=True, nullable=False)  # Vehicle Identification Number
     plate = Column(String(32), unique=True, nullable=True)  # Plate number
     year = Column(Integer, nullable=False)
-    make = Column(String(64), nullable=False)
-    model = Column(String(64), nullable=False)
+    model_id = Column(Integer, ForeignKey('models.model_id'), nullable=False)
     mileage = Column(Integer, nullable=False)
     fleet_number = Column(Integer, nullable=True)  # Fleet number, si aplica
     color_id = Column(Integer, ForeignKey('colors.color_id'), nullable=False)
     motor_id = Column(Integer, ForeignKey('motors.motor_id'), nullable=False)  # Engine details
-    transmission = Column(String(32), nullable=False)  # Transmission details
+    transmission_id = Column(Integer, ForeignKey('transmissions.transmission_id'), nullable=False)  # Transmission type
     cylinders = Column(Integer, nullable=False)
     liters = Column(String(16), nullable=False)  # Engine displacement in liters
     v_type_id = Column(Integer, ForeignKey('vehicle_types.v_type_id'), nullable=False)  # Vehicle type (e.g., sedan, SUV)
@@ -183,6 +182,8 @@ class Vehicle(Base):
     color = relationship("Color", foreign_keys=[color_id], back_populates="vehicles")
     motor = relationship("Motor", foreign_keys=[motor_id], back_populates="vehicles")
     vehicle_type = relationship("VehicleType", foreign_keys=[v_type_id], back_populates="vehicles")
+    model = relationship("Model", foreign_keys=[model_id])
+    transmission = relationship("Transmission", foreign_keys=[transmission_id], back_populates="vehicles")
 
 class Color(Base):
     __tablename__ = 'colors'
@@ -201,3 +202,22 @@ class VehicleType(Base):
     v_type_id = Column(Integer, primary_key=True)
     type = Column(String(64), unique=True, nullable=False)
     vehicles = relationship("Vehicle", back_populates="vehicle_type")
+
+class Make(Base):
+    __tablename__ = 'makes'
+    make_id = Column(Integer, primary_key=True)
+    make = Column(String(64), unique=True, nullable=False)
+    models = relationship("Model", back_populates="make")
+
+class Model(Base):
+    __tablename__ = 'models'
+    model_id = Column(Integer, primary_key=True)
+    make_id = Column(Integer, ForeignKey('makes.make_id'), nullable=False)
+    model = Column(String(64), nullable=False)
+    make = relationship("Make", back_populates="models")
+
+class Transmission(Base):
+    __tablename__ = 'transmissions'
+    transmission_id = Column(Integer, primary_key=True)
+    type = Column(String(64), unique=True, nullable=False)
+    vehicles = relationship("Vehicle", back_populates="transmission")

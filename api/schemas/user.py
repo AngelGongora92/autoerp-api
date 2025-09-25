@@ -222,3 +222,16 @@ class MotorCreate(BaseModel):
 
 class VehicleTypeCreate(BaseModel):
     type: str
+
+class VehicleMakesResponse(BaseModel):
+    make_id: int
+    make: str
+
+class VehicleModelsResponse(BaseModel):
+    make_id: int
+    model_id: int
+    model: str
+
+class VehicleTransmissionsResponse(BaseModel):
+    transmission_id: int
+    type: str

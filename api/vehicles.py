@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from typing import List
-from .database import get_db, Vehicle, Color, Motor, VehicleType
-from .schemas.user import VehicleResponse, VehicleCreate, ColorResponse, ColorCreate, MotorResponse, MotorCreate, VehicleTypeResponse, VehicleTypeCreate
+from .database import get_db, Vehicle, Color, Motor, VehicleType, Make, Model, Transmission
+from .schemas.user import VehicleResponse, VehicleCreate, ColorResponse, ColorCreate, MotorResponse, MotorCreate, VehicleTypeResponse, VehicleTypeCreate, VehicleMakesResponse, VehicleModelsResponse, VehicleTransmissionsResponse
 from fastapi import status
 from fastapi.exceptions import HTTPException
 
@@ -160,3 +160,37 @@ async def get_all_vehicle_types(
     stmt = select(VehicleType)
     vehicle_types = db.scalars(stmt).unique().all()
     return vehicle_types
+
+@router.get("/makes/", response_model=List[VehicleMakesResponse])
+async def get_all_makes(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene una lista de todas las marcas de vehículos.
+    """
+    stmt = select(Make)
+    makes = db.scalars(stmt).unique().all()
+    return makes
+
+@router.get("/models/{make_id}", response_model=List[VehicleModelsResponse])
+async def get_models_by_make_id(
+    make_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene una lista de todos los modelos de una marca específica.
+    """
+    stmt = select(Model).filter(Model.make_id == make_id)
+    models = db.scalars(stmt).unique().all()
+    return models
+
+@router.get("/transmissions/", response_model=List[VehicleTransmissionsResponse])
+async def get_all_transmissions(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene una lista de todos los tipos de transmisión.
+    """
+    stmt = select(Transmission)
+    transmissions = db.scalars(stmt).unique().all()
+    return transmissions
