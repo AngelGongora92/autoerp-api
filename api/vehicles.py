@@ -103,3 +103,60 @@ async def get_all_colors(
     colors = db.scalars(stmt).unique().all()
     return colors
 
+@router.get("/motors/{motor_id}", response_model=MotorResponse)
+async def get_motor_by_id(
+    motor_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene un solo motor por su ID.
+    """
+    motor = db.get(Motor, motor_id)
+
+    if not motor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Motor not found"
+        )
+    
+    return motor
+
+@router.get("/motors/", response_model=List[MotorResponse])
+async def get_all_motors(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene una lista de todos los motores.
+    """
+    stmt = select(Motor)
+    motors = db.scalars(stmt).unique().all()
+    return motors
+
+@router.get("/types/{v_type_id}", response_model=VehicleTypeResponse)
+async def get_vehicle_type_by_id(
+    v_type_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene un solo tipo de vehículo por su ID.
+    """
+    vehicle_type = db.get(VehicleType, v_type_id)
+
+    if not vehicle_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle type not found"
+        )
+    
+    return vehicle_type
+
+@router.get("/types/", response_model=List[VehicleTypeResponse])
+async def get_all_vehicle_types(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene una lista de todos los tipos de vehículos.
+    """
+    stmt = select(VehicleType)
+    vehicle_types = db.scalars(stmt).unique().all()
+    return vehicle_types
