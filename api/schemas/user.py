@@ -168,48 +168,45 @@ class VehicleCreate(BaseModel):
     vin: str
     plate: Optional[str] = None
     year: int
-    make: str
-    model: str
+    model_id: int
     mileage: int
     fleet_number: Optional[int] = None
     color_id: int
     motor_id: int
-    transmission: str
+    transmission_id: int
     cylinders: int
     liters: str
     v_type_id: int
 
 
 class VehicleResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra='ignore')
     vehicle_id: int
     customer_id: Optional[int] = None
     vin: str  # Vehicle Identification Number
     plate: Optional[str] = None  # Plate number
     year: int
-    make: str
-    model: str
+    model: "VehicleModelsResponse" # Nested response
     mileage: int
     fleet_number: Optional[int] = None  # Fleet number
     color: ColorResponse
     motor: MotorResponse
-    transmission: str  # Transmission details
+    transmission: "VehicleTransmissionsResponse"
     cylinders: int
     liters: str  # Engine displacement in liters
     vehicle_type: VehicleTypeResponse
 
-class VehicleUpdate:
+class VehicleUpdate(BaseModel):
     customer_id: Optional[int] = None
     vin: Optional[str] = None
     plate: Optional[str] = None
     year: Optional[int] = None
-    make: Optional[str] = None
-    model: Optional[str] = None
+    model_id: Optional[int] = None
     mileage: Optional[int] = None
     fleet_number: Optional[int] = None
     color_id: Optional[int] = None
     motor_id: Optional[int] = None
-    transmission: Optional[str] = None
+    transmission_id: Optional[int] = None
     cylinders: Optional[int] = None
     liters: Optional[str] = None
     v_type_id: Optional[int] = None
@@ -224,13 +221,16 @@ class VehicleTypeCreate(BaseModel):
     type: str
 
 class VehicleMakesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     make_id: int
     make: str
 
 class VehicleModelsResponse(BaseModel):
-    make_id: int
+    model_config = ConfigDict(from_attributes=True)
     model_id: int
     model: str
+    make: VehicleMakesResponse
+
 
 class VehicleTransmissionsResponse(BaseModel):
     transmission_id: int
