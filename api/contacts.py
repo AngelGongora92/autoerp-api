@@ -11,28 +11,6 @@ from .schemas.user import ContactResponse, ContactCreate
 # El prefijo y las etiquetas ayudan a organizar la API en la documentación de Swagger/OpenAPI
 router = APIRouter()
 
-@router.get("/{customer_id}", response_model=List[ContactResponse])
-async def get_contacts_by_customer(
-    customer_id: int,
-    db: Session = Depends(get_db),
-):
-    """
-    Obtiene todos los contactos para un cliente específico por su ID.
-    """
-    # Paso 1: Verificar si el cliente existe en la base de datos.
-    customer = db.scalar(select(Customer).where(Customer.customer_id == customer_id))
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with id {customer_id} not found"
-        )
-    
-    # Paso 2: Si el cliente existe, buscar y devolver todos los contactos asociados.
-    # Usamos select y scalars para obtener una lista de objetos Contact
-    contacts = db.scalars(select(Contact).where(Contact.customer_id == customer_id)).all()
-    
-    # Si no se encuentran contactos, se devolverá una lista vacía [], lo cual es el comportamiento esperado.
-    return contacts
 
 @router.post("/", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
 async def create_contact(
@@ -67,7 +45,7 @@ async def create_contact(
     return new_contact
 
 
-@router.get("/contact/{contact_id}", response_model=ContactResponse)
+@router.get("/{contact_id}", response_model=ContactResponse)
 async def get_contact_by_id(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -86,7 +64,7 @@ async def get_contact_by_id(
     
     return contact
 
-@router.put("/contact/{contact_id}", response_model=ContactResponse)
+@router.put("/{contact_id}", response_model=ContactResponse)
 async def update_contact(
     contact_id: int,
     contact_data: ContactCreate,
@@ -124,7 +102,7 @@ async def update_contact(
     
     return contact
 
-@router.delete("/contact/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_contact(
     contact_id: int,
     db: Session = Depends(get_db),

@@ -4,10 +4,10 @@ from sqlalchemy import select, func
 from typing import List
 
 # Importar las clases de Pydantic desde su nuevo archivo
-from .schemas.user import UserResponse, UserUpdate, PermissionBase, CustomerResponse, CustomerUpdate, CustomerCreate
+from .schemas.user import UserResponse, UserUpdate, PermissionBase, CustomerResponse, CustomerUpdate, CustomerCreate, ContactResponse
 
 # Reutilizamos la dependencia get_db y los modelos
-from .database import User, Permission, Customer, get_db
+from .database import User, Permission, Customer, get_db, Contact
 
 
 # --- Creación del Router ---
@@ -157,3 +157,25 @@ async def delete_customer_by_id(
     db.delete(customer)
     db.commit()
     return
+
+@router.get("/{customer_id}/contacts/", response_model=List[ContactResponse])
+async def get_contacts_by_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene todos los contactos asociados a un cliente específico.
+    """
+    # Verificar si el cliente existe
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+    
+    # Obtener los contactos asociados al cliente
+    stmt = select(Contact).where(Contact.customer_id == customer_id)
+    contacts = db.scalars(stmt).unique().all()
+    
+    return contacts
