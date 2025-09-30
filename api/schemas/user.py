@@ -29,10 +29,10 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     username: Optional[str] = None
     is_admin: Optional[bool] = None
     permissions: Optional[List[PermissionBase]] = None
-    model_config = ConfigDict(extra='ignore')
 
 class CustomerCreate(BaseModel):
     is_company: bool = False
@@ -58,6 +58,7 @@ class CustomerResponse(BaseModel):
     is_active: bool
 
 class CustomerUpdate(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     is_company: Optional[bool] = None
     cname: Optional[str] = None  # Company name
     fname: Optional[str] = None  # First name
@@ -67,7 +68,6 @@ class CustomerUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
-    model_config = ConfigDict(extra='ignore')
 
 class ContactCreate(BaseModel):
     customer_id: int  # ID del cliente al que pertenece el contacto
@@ -122,6 +122,7 @@ class CreateOrder(BaseModel):
     priority_id: Optional[int] = 1
 
 
+
 class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     order_id: int
@@ -132,11 +133,15 @@ class OrderResponse(BaseModel):
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
+    c_mileage: Optional[int] = None
     op_status_id: Optional[int] = None
     adm_status_id: Optional[int] = None
     priority_id: Optional[int] = None
+    has_extra_info: Optional[bool] = None
+    
 
 class OrderUpdate(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     c_order_id: Optional[str] = None  # Purchase order ID
     order_date: Optional[datetime] = None  # Order date
     advisor_id: Optional[int] = None  # Advisor employee ID
@@ -144,9 +149,32 @@ class OrderUpdate(BaseModel):
     customer_id: Optional[int] = None  # Customer ID
     contact_id: Optional[int] = None  # Contact ID
     vehicle_id: Optional[int] = None
+    c_mileage: Optional[int] = None
     op_status_id: Optional[int] = None
     adm_status_id: Optional[int] = None
     priority_id: Optional[int] = None
+    has_extra_info: Optional[bool] = None
+
+class OrderExtraItemsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int
+    title: str
+    description: Optional[str] = None
+
+class OrderExtraInfoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int
+    info: Optional[str] = None
+    item: OrderExtraItemsResponse
+
+class OrderExtraInfoCreate(BaseModel):
+    order_id: int
+    item_id: int
+    info: Optional[str] = None
+
+class OrderExtraItemsCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
 
 class ColorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -170,14 +198,12 @@ class VehicleCreate(BaseModel):
     year: int
     model_id: int
     mileage: int
-    fleet_number: Optional[int] = None
     color_id: int
     motor_id: int
     transmission_id: int
     cylinders: int
     liters: str
     v_type_id: int
-
 
 class VehicleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra='ignore')
@@ -188,7 +214,6 @@ class VehicleResponse(BaseModel):
     year: int
     model: "VehicleModelsResponse" # Nested response
     mileage: int
-    fleet_number: Optional[int] = None  # Fleet number
     color: ColorResponse
     motor: MotorResponse
     transmission: "VehicleTransmissionsResponse"
@@ -203,7 +228,6 @@ class VehicleUpdate(BaseModel):
     year: Optional[int] = None
     model_id: Optional[int] = None
     mileage: Optional[int] = None
-    fleet_number: Optional[int] = None
     color_id: Optional[int] = None
     motor_id: Optional[int] = None
     transmission_id: Optional[int] = None
@@ -235,3 +259,15 @@ class VehicleModelsResponse(BaseModel):
 class VehicleTransmissionsResponse(BaseModel):
     transmission_id: int
     type: str
+
+class OrderExtraItemsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int
+    title: str
+    description: Optional[str] = None
+
+class OrderExtraInfoCreate(BaseModel):
+    order_id: int
+    item_id: int
+    info: Optional[str] = None
+
