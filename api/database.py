@@ -127,11 +127,9 @@ class Order(Base):
     p_mileage = Column(Integer, nullable=True)  # Presumed mileage
     c_mileage = Column(Integer, nullable=True)  # Current mileage
     service_bay = Column(String(16), nullable = True)
-    
-    
+    has_extra_info = Column(Boolean, default=False)  # Indica si extra info es presente
 
-
-    # Relaciones
+    # Relationships
     advisor = relationship("Employee", foreign_keys=[advisor_id], back_populates="advised_orders")
     mechanic = relationship("Employee", foreign_keys=[mechanic_id], back_populates="mechanic_orders")
     customer = relationship("Customer", back_populates="orders")
@@ -140,6 +138,27 @@ class Order(Base):
     op_status = relationship("OpStatus", back_populates="orders")
     adm_status = relationship("AdmStatus", back_populates="orders")
     priority = relationship("Priority", back_populates="orders")
+    # La relación mantiene el nombre que prefieres.
+    extra_info = relationship("OrderExtraInfo", back_populates="order")
+    
+
+
+class OrderExtraInfo(Base):
+    __tablename__ = 'order_extra_info'
+    order_id = Column(Integer, ForeignKey('orders.order_id'), primary_key=True)
+    item_id = Column(Integer, ForeignKey('order_extra_items.item_id'), primary_key=True)
+    info = Column(String(256), nullable=True)
+    # Relationships
+    order = relationship("Order", back_populates="extra_info")
+    item = relationship("OrderExtraItems", back_populates="infos")
+
+class OrderExtraItems(Base):
+    __tablename__ = 'order_extra_items'
+    item_id = Column(Integer, primary_key=True)
+    title = Column(String(128), nullable=False)
+    description = Column(String(256), nullable=True)
+    # Relationships (renombrado a plural 'infos' para mayor claridad)
+    infos = relationship("OrderExtraInfo", back_populates="item")
 
 class OpStatus(Base):
     __tablename__ = 'op_status'
@@ -169,7 +188,7 @@ class Vehicle(Base):
     year = Column(Integer, nullable=False)
     model_id = Column(Integer, ForeignKey('models.model_id'), nullable=False)
     mileage = Column(Integer, nullable=False)
-    fleet_number = Column(Integer, nullable=True)  # Fleet number, si aplica
+    
     color_id = Column(Integer, ForeignKey('colors.color_id'), nullable=False)
     motor_id = Column(Integer, ForeignKey('motors.motor_id'), nullable=False)  # Engine details
     transmission_id = Column(Integer, ForeignKey('transmissions.transmission_id'), nullable=False)  # Transmission type

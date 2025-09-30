@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select
-from .database import get_db, Order
-from .schemas.user import CreateOrder, OrderResponse, OrderUpdate
+from .database import get_db, Order, OrderExtraItems, OrderExtraInfo
+from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate
 
 router = APIRouter()
 
@@ -97,3 +97,52 @@ async def get_order_by_custom_id(
     if not order:
         raise HTTPException(status_code=404, detail=f"Order with custom ID '{c_order_id}' not found")
     return order
+
+@router.get("/extra-items/", response_model=List[OrderExtraItemsResponse])
+async def get_all_order_extra_items(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene todos los ítems extra de órdenes.
+    """
+    stmt = select(OrderExtraItems)
+    items = db.scalars(stmt).all()
+    return items
+
+@router.post("/extra-info/", response_model=List[OrderExtraInfoCreate], status_code=status.HTTP_201_CREATED,
+             summary="Crea una o más entradas de información extra para una orden")
+async def create_order_extra_info(
+    order_extra_info: List[OrderExtraInfoCreate],
+    db: Session = Depends(get_db),
+):
+    """
+    Crea una o más entradas de información extra asociadas a una orden.
+    Acepta una lista de objetos para inserción masiva.
+    Verifica que la `order_id` y la `item_id` existan antes de la creación.
+    """
+    created_info = []
+    for info_data in order_extra_info:
+        # Verificar que la order_id exista
+        order_exists = db.get(Order, info_data.order_id)
+        if not order_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Order with ID {info_data.order_id} not found."
+            )
+        
+        # Verificar que la item_id exista en OrderExtraItems
+        item_exists = db.get(OrderExtraItems, info_data.item_id)
+        if not item_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"OrderExtraItem with ID {info_data.item_id} not found."
+            )
+
+        new_info = OrderExtraInfo(**info_data.model_dump())
+        db.add(new_info)
+        created_info.append(new_info)
+
+    db.commit()
+    # El refresh no es estrictamente necesario aquí ya que no hay campos generados por DB,
+    # pero es buena práctica si el modelo cambiara en el futuro.
+    return created_info
