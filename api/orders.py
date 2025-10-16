@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select
 from .database import get_db, Order, OrderExtraItems, OrderExtraInfo
-from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate
+from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse
+
 
 router = APIRouter()
 
@@ -109,40 +110,56 @@ async def get_all_order_extra_items(
     items = db.scalars(stmt).all()
     return items
 
-@router.post("/extra-info/", response_model=List[OrderExtraInfoCreate], status_code=status.HTTP_201_CREATED,
-             summary="Crea una o más entradas de información extra para una orden")
-async def create_order_extra_info(
+@router.get("/extra-info/{order_id}", response_model=List[OrderExtraInfoResponse])
+async def get_order_extra_info(
+    order_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene toda la información extra asociada a una orden específica.
+    """
+    stmt = select(OrderExtraInfo).where(OrderExtraInfo.order_id == order_id)
+    extra_info = db.scalars(stmt).all()
+    return extra_info
+
+@router.post("/extra-info/", response_model=List[OrderExtraInfoResponse], status_code=status.HTTP_200_OK,
+             summary="Crea o actualiza entradas de información extra para una orden (Upsert)")
+async def upsert_order_extra_info(
     order_extra_info: List[OrderExtraInfoCreate],
     db: Session = Depends(get_db),
 ):
     """
-    Crea una o más entradas de información extra asociadas a una orden.
-    Acepta una lista de objetos para inserción masiva.
-    Verifica que la `order_id` y la `item_id` existan antes de la creación.
+    Crea o actualiza (Upsert) una o más entradas de información extra asociadas a una orden.
+    Acepta una lista de objetos. Para cada objeto:
+    - Si la combinación `(order_id, item_id)` ya existe, actualiza el campo `info`.
+    - Si no existe, crea una nueva entrada.
     """
-    created_info = []
+    processed_info = []
     for info_data in order_extra_info:
-        # Verificar que la order_id exista
-        order_exists = db.get(Order, info_data.order_id)
-        if not order_exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Order with ID {info_data.order_id} not found."
-            )
-        
-        # Verificar que la item_id exista en OrderExtraItems
-        item_exists = db.get(OrderExtraItems, info_data.item_id)
-        if not item_exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"OrderExtraItem with ID {info_data.item_id} not found."
-            )
-
-        new_info = OrderExtraInfo(**info_data.model_dump())
-        db.add(new_info)
-        created_info.append(new_info)
-
+        # 1. Buscar si la entrada ya existe usando la clave primaria compuesta
+        existing_info = db.get(OrderExtraInfo, (info_data.order_id, info_data.item_id))
+ 
+        if existing_info:
+            # 2. Si existe, actualiza el campo 'info'
+            existing_info.info = info_data.info
+            db.add(existing_info) # Marcar el objeto como 'dirty' para que se guarde
+            processed_info.append(existing_info)
+        else:
+            # 3. Si no existe, crea una nueva entrada
+            # (Opcional pero recomendado) Verificar que las FKs existan
+            if not db.get(Order, info_data.order_id):
+                raise HTTPException(status_code=404, detail=f"Order with ID {info_data.order_id} not found.")
+            if not db.get(OrderExtraItems, info_data.item_id):
+                raise HTTPException(status_code=404, detail=f"Item with ID {info_data.item_id} not found.")
+ 
+            new_info = OrderExtraInfo(**info_data.model_dump())
+            db.add(new_info)
+            processed_info.append(new_info)
+ 
     db.commit()
-    # El refresh no es estrictamente necesario aquí ya que no hay campos generados por DB,
-    # pero es buena práctica si el modelo cambiara en el futuro.
-    return created_info
+ 
+    # Refrescar cada objeto para obtener el estado final de la DB (útil si hay triggers o defaults)
+    for info in processed_info:
+        db.refresh(info)
+ 
+    return processed_info
