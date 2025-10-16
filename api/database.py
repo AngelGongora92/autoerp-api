@@ -127,6 +127,7 @@ class Order(Base):
     p_mileage = Column(Integer, nullable=True)  # Presumed mileage
     c_mileage = Column(Integer, nullable=True)  # Current mileage
     service_bay = Column(String(16), nullable = True)
+    fuel_level = Column(Integer, nullable=True) # Nivel de combustible (ej: 1-8)
     has_extra_info = Column(Boolean, default=False)  # Indica si extra info es presente
 
     # Relationships

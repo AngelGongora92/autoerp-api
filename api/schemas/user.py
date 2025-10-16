@@ -120,6 +120,8 @@ class CreateOrder(BaseModel):
     adm_status_id: Optional[int] = 1
     op_status_id: Optional[int] = 1
     priority_id: Optional[int] = 1
+    fuel_level: Optional[int] = None
+
 
 
 
@@ -138,6 +140,8 @@ class OrderResponse(BaseModel):
     adm_status_id: Optional[int] = None
     priority_id: Optional[int] = None
     has_extra_info: Optional[bool] = None
+    fuel_level: Optional[int] = None
+    service_bay: Optional[str] = None
     
 
 class OrderUpdate(BaseModel):
@@ -149,11 +153,14 @@ class OrderUpdate(BaseModel):
     customer_id: Optional[int] = None  # Customer ID
     contact_id: Optional[int] = None  # Contact ID
     vehicle_id: Optional[int] = None
+    p_mileage: Optional[int] = None
     c_mileage: Optional[int] = None
     op_status_id: Optional[int] = None
     adm_status_id: Optional[int] = None
     priority_id: Optional[int] = None
     has_extra_info: Optional[bool] = None
+    fuel_level: Optional[int] = None
+    service_bay: Optional[str] = None
 
 class OrderExtraItemsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -270,4 +277,3 @@ class OrderExtraInfoCreate(BaseModel):
     order_id: int
     item_id: int
     info: Optional[str] = None
-
