@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select
-from .database import get_db, Order, OrderExtraItems, OrderExtraInfo
-from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse
+from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails
+from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse, BodyworkDetailTypesResponse, BodyworkDetailTypesCreate, BodyworkDetailsResponse, BodyworkDetailsCreate, BodyworkDetailTypesUpdate, BodyworkDetailsUpdate
 
 
 router = APIRouter()
@@ -163,3 +163,164 @@ async def upsert_order_extra_info(
         db.refresh(info)
  
     return processed_info
+
+
+@router.get("/bodywork-detail-types/", response_model=List[BodyworkDetailTypesResponse])
+async def get_all_bodywork_detail_types(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene todos los tipos de detalle de carrocería.
+    """
+    stmt = select(BodyworkDetailTypes)
+    detail_types = db.scalars(stmt).all()
+    return detail_types
+
+@router.post("/bodywork-detail-types/", response_model=BodyworkDetailTypesResponse, status_code=status.HTTP_201_CREATED)
+async def create_bodywork_detail_type(
+    detail_type_data: BodyworkDetailTypesCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Crea un nuevo tipo de detalle de carrocería.
+    """
+    new_detail_type = BodyworkDetailTypes(**detail_type_data.model_dump())
+    db.add(new_detail_type)
+    db.commit()
+    db.refresh(new_detail_type)
+    return new_detail_type
+
+@router.patch("/bodywork-detail-types/{detail_type_id}", response_model=BodyworkDetailTypesResponse)
+async def update_bodywork_detail_type(
+    detail_type_id: int,
+    detail_type_data: BodyworkDetailTypesUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Actualiza parcialmente un tipo de detalle de carrocería existente.
+    """
+    detail_type = db.get(BodyworkDetailTypes, detail_type_id)
+    if not detail_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bodywork Detail Type with ID {detail_type_id} not found."
+        )
+
+    # Actualiza los campos
+    update_data = detail_type_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(detail_type, key, value)
+
+    db.commit()
+    db.refresh(detail_type)
+    return detail_type
+
+@router.get("/bodywork-details/{order_id}", response_model=List[BodyworkDetailsResponse])
+async def get_bodywork_details(
+    order_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene todos los detalles de la lista de verificación de carrocería para una orden.
+    """
+    stmt = select(BodyworkDetails).where(BodyworkDetails.order_id == order_id)
+    details = db.scalars(stmt).all()
+    return details
+
+@router.patch("/bodywork-details/{detail_id}", response_model=BodyworkDetailsResponse)
+async def update_bodywork_detail(
+    detail_id: int,
+    detail_data: BodyworkDetailsUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Actualiza parcialmente un detalle de la lista de verificación de carrocería.
+    """
+    detail = db.get(BodyworkDetails, detail_id)
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bodywork Detail with ID {detail_id} not found."
+        )
+
+    # Actualiza los campos
+    update_data = detail_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(detail, key, value)
+
+    db.commit()
+    db.refresh(detail)
+    return detail
+
+@router.delete("/bodywork-details/{detail_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_bodywork_detail(
+    detail_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Elimina un detalle específico de la lista de verificación de carrocería.
+    """
+    detail = db.get(BodyworkDetails, detail_id)
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bodywork Detail with ID {detail_id} not found."
+        )
+
+    db.delete(detail)
+    db.commit()
+    return None
+
+
+@router.post("/bodywork-details/", response_model=List[BodyworkDetailsResponse], status_code=status.HTTP_201_CREATED)
+async def create_bodywork_details(
+    detail_items: List[BodyworkDetailsCreate],
+    db: Session = Depends(get_db),
+):
+    """
+    Crea una o más entradas en la lista de verificación de carrocería para una orden.
+    Acepta una lista de objetos de checklist.
+    """
+    created_items = []
+    for item_data in detail_items:
+        # (Opcional pero recomendado) Verificar que las FKs existan para cada item
+        if not db.get(Order, item_data.order_id):
+            raise HTTPException(status_code=404, detail=f"Order with ID {item_data.order_id} not found.")
+        if not db.get(BodyworkDetailTypes, item_data.detail_type_id):
+            raise HTTPException(status_code=404, detail=f"Bodywork Detail Type with ID {item_data.detail_type_id} not found.")
+
+        new_item = BodyworkDetails(**item_data.model_dump())
+        db.add(new_item)
+        created_items.append(new_item)
+
+    db.commit()
+
+    # Refrescar cada objeto para obtener los IDs generados por la base de datos
+    for item in created_items:
+        db.refresh(item)
+
+    return created_items
+
+@router.get("/order-exists/{c_order_id}", response_model=bool)
+async def check_order_exists(
+    c_order_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Verifica si una orden existe.
+    """
+    order = db.get(Order, c_order_id)
+    return order is not None
+
+@router.get("/last-order-id/", response_model=Optional[int])
+async def get_last_order_id(
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene el ID de la última orden.
+    """
+    stmt = select(Order).order_by(Order.order_id.desc())
+    last_order = db.scalars(stmt).first()
+    if last_order:
+        return last_order.c_order_id
+    return None
