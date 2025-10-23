@@ -277,3 +277,56 @@ class OrderExtraInfoCreate(BaseModel):
     order_id: int
     item_id: int
     info: Optional[str] = None
+
+class BodyworkDetailTypesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    detail_type_id: int
+    type: str
+    color: Optional[str] = None
+
+from enum import Enum
+
+class BodyworkChecklistView(str, Enum):
+    front = "front"
+    back = "back"
+    left = "left"
+    right = "right"
+    up = "up"
+
+class BodyworkDetailTypesCreate(BaseModel):
+    type: str
+    color: Optional[str] = None
+
+class BodyworkDetailTypesUpdate(BaseModel):
+    type: Optional[str] = None
+    color: Optional[str] = None
+
+class BodyworkDetailsCreate(BaseModel):
+    order_id: int
+    view: BodyworkChecklistView
+    detail_type_id: int
+    x: Optional[float] = None
+    y: Optional[float] = None
+    is_free_selection: bool = False
+    detail_notes: Optional[str] = None
+    picture_path: Optional[str] = None
+
+class BodyworkDetailsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    detail_id: int
+    view: BodyworkChecklistView
+    detail_type: BodyworkDetailTypesResponse
+    x: Optional[float] = None
+    y: Optional[float] = None
+    is_free_selection: bool
+    detail_notes: Optional[str] = None
+    picture_path: Optional[str] = None
+
+class BodyworkDetailsUpdate(BaseModel):
+    view: Optional[BodyworkChecklistView] = None
+    detail_type_id: Optional[int] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    is_free_selection: Optional[bool] = None
+    detail_notes: Optional[str] = None
+    picture_path: Optional[str] = None

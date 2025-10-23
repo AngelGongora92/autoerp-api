@@ -1,7 +1,8 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from api.schemas.user import BodyworkChecklistView # Importar el Enum
 from .hashing import verify_password
 from datetime import datetime
 
@@ -140,8 +141,8 @@ class Order(Base):
     adm_status = relationship("AdmStatus", back_populates="orders")
     priority = relationship("Priority", back_populates="orders")
     # La relación mantiene el nombre que prefieres.
-    extra_info = relationship("OrderExtraInfo", back_populates="order")
-    
+    extra_info = relationship("OrderExtraInfo", back_populates="order", cascade="all, delete-orphan")
+    bodywork_details = relationship("BodyworkDetails", back_populates="order", cascade="all, delete-orphan") # Relación uno a muchos
 
 
 class OrderExtraInfo(Base):
@@ -241,3 +242,26 @@ class Transmission(Base):
     transmission_id = Column(Integer, primary_key=True)
     type = Column(String(64), unique=True, nullable=False)
     vehicles = relationship("Vehicle", back_populates="transmission")
+
+class BodyworkDetails(Base):
+    __tablename__ = 'bodywork_details'
+    detail_id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.order_id', ondelete='CASCADE'), nullable=False)
+    view = Column(Enum(BodyworkChecklistView, name="bodywork_checklist_view_enum"), nullable=False)
+    detail_type_id = Column(Integer, ForeignKey('bodywork_detail_types.detail_type_id'), nullable=False)
+    x = Column(Float, nullable=True) # Coordenada X en el diagrama
+    y = Column(Float, nullable=True) # Coordenada Y en el diagrama
+    is_free_selection = Column(Boolean, default=False, nullable=False) # True si el punto fue añadido manualmente
+    detail_notes = Column(String(256), nullable=True)
+    picture_path = Column(String(256), nullable=True)  # Ruta a la imagen almacenada
+    order = relationship("Order", back_populates="bodywork_details")
+    detail_type = relationship("BodyworkDetailTypes")
+
+class BodyworkDetailTypes(Base):
+    __tablename__ = 'bodywork_detail_types'
+    detail_type_id = Column(Integer, primary_key=True)
+    type = Column(String(128), unique=True, nullable=False)
+    color = Column(String(32), nullable=True)  # Columna para el color (ej. #FF5733)
+    # No es estrictamente necesario tener un back_populates aquí si no necesitas
+    # navegar desde un BodyworkDetailType a todos los checklists que lo usan.
+    # bodywork_checklist = relationship("BodyworkChecklist", back_populates="detail_type")
