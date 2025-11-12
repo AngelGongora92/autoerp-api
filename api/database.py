@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from api.schemas.user import BodyworkChecklistView # Importar el Enum
@@ -143,6 +144,7 @@ class Order(Base):
     # La relación mantiene el nombre que prefieres.
     extra_info = relationship("OrderExtraInfo", back_populates="order", cascade="all, delete-orphan")
     bodywork_details = relationship("BodyworkDetails", back_populates="order", cascade="all, delete-orphan") # Relación uno a muchos
+    inventory_data = relationship("OrderInventoryData", back_populates="order", cascade="all, delete-orphan")
 
 
 class OrderExtraInfo(Base):
@@ -248,10 +250,8 @@ class BodyworkDetails(Base):
     detail_id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey('orders.order_id', ondelete='CASCADE'), nullable=False)
     view = Column(Enum(BodyworkChecklistView, name="bodywork_checklist_view_enum"), nullable=False)
-    detail_type_id = Column(Integer, ForeignKey('bodywork_detail_types.detail_type_id'), nullable=False)
-    x = Column(Float, nullable=True) # Coordenada X en el diagrama
-    y = Column(Float, nullable=True) # Coordenada Y en el diagrama
-    is_free_selection = Column(Boolean, default=False, nullable=False) # True si el punto fue añadido manualmente
+    detail_type_id = Column(Integer, ForeignKey('bodywork_detail_types.detail_type_id'), nullable=True)
+    coordinates = Column(JSONB, nullable=True) # Almacena {"x": float, "y": float}
     detail_notes = Column(String(256), nullable=True)
     picture_path = Column(String(256), nullable=True)  # Ruta a la imagen almacenada
     order = relationship("Order", back_populates="bodywork_details")
@@ -265,3 +265,44 @@ class BodyworkDetailTypes(Base):
     # No es estrictamente necesario tener un back_populates aquí si no necesitas
     # navegar desde un BodyworkDetailType a todos los checklists que lo usan.
     # bodywork_checklist = relationship("BodyworkChecklist", back_populates="detail_type")
+
+
+class InventoryTypes(Base):
+    __tablename__ = 'inventory_types'
+    inv_type_id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    component_key = Column(String(100), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    position = Column(Integer, nullable=False, default=0)
+    picture_path = Column(String(512), nullable=True)
+
+    # Relación uno a muchos con InventoryItems
+    items = relationship("InventoryItems", back_populates="inventory_type", cascade="all, delete-orphan")
+
+
+class InventoryItems(Base):
+    __tablename__ = 'inventory_items'
+    item_id = Column(Integer, primary_key=True)
+    inv_type_id = Column(Integer, ForeignKey('inventory_types.inv_type_id'), nullable=False)
+    label = Column(String(255), nullable=False)
+    input_type = Column(String(50), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    description = Column(String, nullable=True)  # Se mapea a TEXT en PostgreSQL
+    picture_upload = Column(Boolean, nullable=False, default=False)
+    is_mandatory = Column(Boolean, nullable=False, default=False)
+
+    inventory_type = relationship("InventoryTypes", back_populates="items")
+
+
+class OrderInventoryData(Base):
+    __tablename__ = 'order_inventory_data'
+    data_id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.order_id', ondelete='CASCADE'), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey('inventory_items.item_id', ondelete='CASCADE'), nullable=False, index=True)
+    data = Column(JSONB, nullable=True) # Valor del input, puede ser un objeto JSON
+
+    # Relationships
+    order = relationship("Order", back_populates="inventory_data")
+    item = relationship("InventoryItems")
+
+    __table_args__ = (UniqueConstraint('order_id', 'item_id', name='_order_item_uc'),)

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 class PermissionResponse(BaseModel):
     name: str
@@ -284,6 +284,10 @@ class BodyworkDetailTypesResponse(BaseModel):
     type: str
     color: Optional[str] = None
 
+class BodyworkDetailCoordinates(BaseModel):
+    x: float
+    y: float
+
 from enum import Enum
 
 class BodyworkChecklistView(str, Enum):
@@ -304,10 +308,8 @@ class BodyworkDetailTypesUpdate(BaseModel):
 class BodyworkDetailsCreate(BaseModel):
     order_id: int
     view: BodyworkChecklistView
-    detail_type_id: int
-    x: Optional[float] = None
-    y: Optional[float] = None
-    is_free_selection: bool = False
+    detail_type_id: int = None
+    coordinates: Optional[BodyworkDetailCoordinates] = None
     detail_notes: Optional[str] = None
     picture_path: Optional[str] = None
 
@@ -316,17 +318,101 @@ class BodyworkDetailsResponse(BaseModel):
     detail_id: int
     view: BodyworkChecklistView
     detail_type: BodyworkDetailTypesResponse
-    x: Optional[float] = None
-    y: Optional[float] = None
-    is_free_selection: bool
+    coordinates: Optional[BodyworkDetailCoordinates] = None
     detail_notes: Optional[str] = None
     picture_path: Optional[str] = None
 
 class BodyworkDetailsUpdate(BaseModel):
     view: Optional[BodyworkChecklistView] = None
     detail_type_id: Optional[int] = None
-    x: Optional[float] = None
-    y: Optional[float] = None
-    is_free_selection: Optional[bool] = None
+    coordinates: Optional[BodyworkDetailCoordinates] = None
     detail_notes: Optional[str] = None
     picture_path: Optional[str] = None
+
+
+class InventoryTypesCreate(BaseModel):
+    name: str
+    component_key: Optional[str] = "generic_checklist"
+    is_active: bool = True
+    picture_path: Optional[str] = None
+
+class InventoryTypesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    inv_type_id: int
+    name: str
+    component_key: str
+    is_active: bool
+    position: int
+    picture_path: Optional[str] = None
+
+class InventoryTypesUpdate(BaseModel):
+    name: Optional[str] = None
+    component_key: Optional[str] = None
+    is_active: Optional[bool] = None
+    position: Optional[int] = None
+    picture_path: Optional[str] = None
+
+class InventoryTypesReorder(BaseModel):
+    inv_type_id: int
+    position: int
+
+class InventoryItemsCreate(BaseModel):
+    inv_type_id: int
+    label: str
+    input_type: str
+    description: Optional[str] = ""
+    is_mandatory: bool = False
+    picture_upload: bool = False
+
+class InventoryItemsUpdate(BaseModel):
+    item_id: int
+    inv_type_id: Optional[int] = None
+    label: Optional[str] = None
+    input_type: Optional[str] = None
+    position: Optional[int] = None
+    description: Optional[str] = None
+    is_mandatory: Optional[bool] = None
+    picture_upload: Optional[bool] = None
+
+class InventoryItemsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int
+    inventory_type: InventoryTypesResponse # Cambiado de 'inv_type' a 'inventory_type'
+    label: str
+    input_type: str
+    position: int
+    description: Optional[str] = None
+    is_mandatory: bool
+    picture_upload: bool
+
+# Nuevo esquema para un ítem de inventario sin la información redundante del tipo.
+class InventoryItemStrippedResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int
+    label: str
+    input_type: str
+    position: int
+    description: Optional[str] = None
+    is_mandatory: bool
+    picture_upload: bool
+
+# Nuevo esquema para la respuesta completa y estructurada.
+class InventoryItemsByTypeResponse(BaseModel):
+    inventory_type: InventoryTypesResponse
+    items: List[InventoryItemStrippedResponse]
+
+class InventoryItemReorder(BaseModel):
+    item_id: int
+    position: int
+
+class OrderInventoryDataCreate(BaseModel):
+    order_id: int
+    item_id: int
+    data: Optional[Dict[str, Any]] = None
+
+class OrderInventoryDataResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    data_id: int
+    order_id: int
+    item_id: int
+    data: Optional[Dict[str, Any]] = None
