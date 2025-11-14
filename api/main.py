@@ -8,6 +8,7 @@ from api.contacts import router as contacts_router  # Importa el router de conta
 from api import employees as employees_router # Importa el router de empleados
 from api import orders as orders_router # Importa el router de órdenes
 from api import vehicles as vehicles_router # Importa el router de vehículos
+from api import appointments as appointments_router # Importa el router de citas
 
 # --- Creación de Tablas en la Base de Datos ---
 # Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
@@ -48,11 +49,12 @@ app.include_router(contacts_router, prefix="/contacts", tags=["Contactos"])
 app.include_router(employees_router.router, prefix="/employees", tags=["Empleados"])
 app.include_router(orders_router.router, prefix="/orders", tags=["Órdenes"])
 app.include_router(vehicles_router.router, prefix="/vehicles", tags=["Vehículos"])
+app.include_router(appointments_router.router, prefix="/appointments", tags=["Citas"])
 
 
 
 @app.get("/")
-async def read_root():
+async def root():
     """
     Ruta de bienvenida de la API.
     """

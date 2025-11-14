@@ -306,3 +306,47 @@ class OrderInventoryData(Base):
     item = relationship("InventoryItems")
 
     __table_args__ = (UniqueConstraint('order_id', 'item_id', name='_order_item_uc'),)
+
+
+class Appointment(Base):
+    __tablename__ = 'appointments'
+    appointment_id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey('customers.customer_id', ondelete='SET NULL'), nullable=True)
+    contact_id = Column(Integer, ForeignKey('contacts.contact_id', ondelete='SET NULL'), nullable=True)
+    vehicle_id = Column(Integer, ForeignKey('vehicles.vehicle_id', ondelete='SET NULL'), nullable=True)
+    scheduled_by = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
+    assigned_to = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
+    appointment_date = Column(TIMESTAMP(timezone=True), nullable=False)
+    reason_id = Column(Integer, ForeignKey('appointment_reasons.reason_id'), nullable=True)
+    status_id = Column(Integer, ForeignKey('appointment_status.status_id'), nullable=True)
+    notes = Column(String(256), nullable=True)
+    rescheduled_count = Column(Integer, default=0)
+
+    #Temporal fields
+    temp_cname = Column(String(64), nullable=True)  # Temporary company name
+    temp_fname = Column(String(64), nullable=True)  # Temporary first name
+    temp_lname = Column(String(64), nullable=True)  # Temporary last name
+    temp_email = Column(String(128), nullable=True)  # Temporary email
+    temp_phone = Column(String(32), nullable=True)  # Temporary phone number
+    temp_vehicle_data = Column(JSONB, nullable=True) # Datos temporales del vehículo en formato JSON
+
+
+    # Relationships
+    customer = relationship("Customer")
+    contact = relationship("Contact")
+    vehicle = relationship("Vehicle")
+    scheduler = relationship("Employee", foreign_keys=[scheduled_by])
+    assignee = relationship("Employee", foreign_keys=[assigned_to])
+    status = relationship("AppointmentStatus", foreign_keys=[status_id])
+    reason = relationship("AppointmentReason", foreign_keys=[reason_id])
+
+    
+class AppointmentStatus(Base):
+    __tablename__ = 'appointment_status'
+    status_id = Column(Integer, primary_key=True)
+    status = Column(String(64), unique=True, nullable=False)  # e.g., Scheduled, Completed, Canceled
+
+class AppointmentReason(Base):
+    __tablename__ = 'appointment_reasons'
+    reason_id = Column(Integer, primary_key=True)
+    reason = Column(String(128), unique=True, nullable=False)  # e.g., Maintenance, Repair, Inspection
