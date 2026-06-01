@@ -1,5 +1,10 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env al iniciar la app
+load_dotenv()
+
 from .database import Base, engine  # Importamos la Base y el engine
 from api import auth as auth_router  # Importa el router de autenticación
 from api import users as users_router  # Importa el router de usuarios
@@ -9,6 +14,8 @@ from api import employees as employees_router # Importa el router de empleados
 from api import orders as orders_router # Importa el router de órdenes
 from api import vehicles as vehicles_router # Importa el router de vehículos
 from api import appointments as appointments_router # Importa el router de citas
+from api import schedules as schedules_router # Importa el router de horarios
+from api import settings as settings_router # Importa el router de configuración
 
 # --- Creación de Tablas en la Base de Datos ---
 # Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
@@ -50,7 +57,8 @@ app.include_router(employees_router.router, prefix="/employees", tags=["Empleado
 app.include_router(orders_router.router, prefix="/orders", tags=["Órdenes"])
 app.include_router(vehicles_router.router, prefix="/vehicles", tags=["Vehículos"])
 app.include_router(appointments_router.router, prefix="/appointments", tags=["Citas"])
-
+app.include_router(schedules_router.router, prefix="/schedules", tags=["Horarios"])
+app.include_router(settings_router.router, prefix="/settings", tags=["Configuración"])
 
 
 @app.get("/")

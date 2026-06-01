@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from typing import List
 
 # Importar las clases de Pydantic desde su nuevo archivo
-from .schemas.user import UserResponse, UserUpdate, PermissionBase, CustomerResponse, CustomerUpdate, CustomerCreate, ContactResponse
+from .schemas.user import CustomerResponse, CustomerUpdate, CustomerCreate, ContactResponse
 
 # Reutilizamos la dependencia get_db y los modelos
 from .database import User, Permission, Customer, get_db, Contact
