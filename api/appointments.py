@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model
+from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer
 from .schemas.user import AppointmentCreate, AppointmentResponse, AppointmentStatusResponse, AppointmentReasonResponse
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
@@ -66,35 +66,43 @@ async def create_appointment(
     db.refresh(new_appointment)
 
     # --- Preparar datos para notificación ---
+    # Obtener cliente y vehículo de manera explícita (evita problemas de lazy loading)
+    customer = None
+    if new_appointment.customer_id:
+        customer = db.get(Customer, new_appointment.customer_id)
+
+    vehicle = None
+    if new_appointment.vehicle_id:
+        vehicle = db.get(Vehicle, new_appointment.vehicle_id)
+
     # 1. Nombre Cliente
     customer_name = new_appointment.temp_fname or "Cliente"
-    if new_appointment.customer:
-        if new_appointment.customer.is_company:
-             customer_name = new_appointment.customer.cname or "Cliente"
+    if customer:
+        if customer.is_company:
+             customer_name = customer.cname or "Cliente"
         else:
-             customer_name = f"{new_appointment.customer.fname or ''} {new_appointment.customer.lname or ''}".strip()
+             customer_name = f"{customer.fname or ''} {customer.lname or ''}".strip()
 
     # 2. Teléfono
     phone = new_appointment.temp_phone
-    if not phone and new_appointment.customer:
-        phone = new_appointment.customer.phone
+    if not phone and customer:
+        phone = customer.phone
     
     # 3. Fecha
     date_str = new_appointment.appointment_date.strftime("%d/%m/%Y a las %H:%M")
 
     # 4. Vehículo
     vehicle_info = "Vehículo no especificado"
-    if new_appointment.vehicle:
+    if vehicle:
         try:
-            v = new_appointment.vehicle
-            make = v.model.make.make if (v.model and v.model.make) else ""
-            model = v.model.model if v.model else ""
-            vehicle_info = f"{v.year} {make} {model}".strip()
+            make = vehicle.model.make.make if (vehicle.model and vehicle.model.make) else ""
+            model = vehicle.model.model if vehicle.model else ""
+            vehicle_info = f"{vehicle.year} {make} {model}".strip()
         except Exception:
             vehicle_info = "Vehículo Registrado"
     elif new_appointment.temp_vehicle_data and isinstance(new_appointment.temp_vehicle_data, dict):
-        data = new_appointment.temp_vehicle_data
-        vehicle_info = f"{data.get('year', '')} {data.get('make', '')} {data.get('model', '')}".strip()
+        temp_v = new_appointment.temp_vehicle_data
+        vehicle_info = f"{temp_v.get('year', '')} {temp_v.get('make', '')} {temp_v.get('model', '')}".strip()
 
     # Enviar notificación de WhatsApp si se solicita y hay teléfono
     if send_whatsapp and phone:
@@ -102,8 +110,8 @@ async def create_appointment(
 
     # Enviar notificación de correo por Brevo si se solicita y hay correo
     customer_email = new_appointment.temp_email
-    if not customer_email and new_appointment.customer:
-        customer_email = new_appointment.customer.email
+    if not customer_email and customer:
+        customer_email = customer.email
 
     if send_email and customer_email:
         await send_email_confirmation_brevo(customer_email, customer_name, date_str, vehicle_info, new_appointment.appointment_id)
