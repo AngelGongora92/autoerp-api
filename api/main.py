@@ -67,16 +67,3 @@ async def root():
     Ruta de bienvenida de la API.
     """
     return {"message": "¡API en funcionamiento! Revisa la documentación en http://127.0.0.1:8000/docs"}
-
-@app.get("/test-env")
-async def test_env():
-    import os
-    return {
-        "META_TOKEN_SET": bool(os.environ.get("META_TOKEN")),
-        "META_PHONE_ID_SET": bool(os.environ.get("META_PHONE_ID")),
-        "META_TEST_PHONE_NUMBER_SET": bool(os.environ.get("META_TEST_PHONE_NUMBER")),
-        "BREVO_API_KEY_SET": bool(os.environ.get("BREVO_API_KEY")),
-        "BREVO_SENDER_EMAIL_SET": bool(os.environ.get("BREVO_SENDER_EMAIL")),
-        "BREVO_SENDER_NAME_SET": bool(os.environ.get("BREVO_SENDER_NAME")),
-        "DATABASE_URL_SET": bool(os.environ.get("DATABASE_URL")),
-    }
