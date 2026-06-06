@@ -27,7 +27,7 @@ async def get_vehicles_by_id(
     return vehicles
 
 
-@router.post("/", response_model=VehicleCreate, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(
     vehicle_data: VehicleCreate,
     db: Session = Depends(get_db),
