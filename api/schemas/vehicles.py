@@ -67,3 +67,4 @@ class VehicleInfoForAppointment(BaseModel):
     year: int
     model: "VehicleModelsResponse"
     color: "ColorResponse"
+    plate: Optional[str] = None

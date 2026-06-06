@@ -188,6 +188,7 @@ class VehicleInfoForAppointment(BaseModel):
     year: int
     model: "VehicleModelsResponse"
     color: "ColorResponse"
+    plate: Optional[str] = None
 
 class ColorCreate(BaseModel):
     color: str
@@ -419,6 +420,8 @@ class AppointmentCreate(BaseModel):
     reason_ids: List[int]
     status_id: int
     notes: Optional[str] = None
+    send_whatsapp: Optional[bool] = False
+    send_email: Optional[bool] = False
 
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

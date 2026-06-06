@@ -35,6 +35,28 @@ async def create_vehicle(
     """
     Crea un nuevo vehículo en la base de datos.
     """
+    # 1. Verificar duplicidad de VIN
+    if vehicle_data.vin:
+        existing_vin = db.scalars(
+            select(Vehicle).where(Vehicle.vin == vehicle_data.vin)
+        ).first()
+        if existing_vin:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El vehículo con este número VIN ya existe"
+            )
+
+    # 2. Verificar duplicidad de Placas
+    if vehicle_data.plate:
+        existing_plate = db.scalars(
+            select(Vehicle).where(Vehicle.plate == vehicle_data.plate)
+        ).first()
+        if existing_plate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El vehículo con estas placas ya existe"
+            )
+
     new_vehicle = Vehicle(**vehicle_data.model_dump())
     db.add(new_vehicle)
     db.commit()
