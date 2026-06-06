@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -112,6 +112,10 @@ class Employee(Base):
     position = relationship("Position", back_populates="employees")
     advised_orders = relationship("Order", foreign_keys='Order.advisor_id', back_populates="advisor")
     mechanic_orders = relationship("Order", foreign_keys='Order.mechanic_id', back_populates="mechanic")
+    
+    # Relaciones para el sistema de horarios
+    schedule_blocks = relationship("EmployeeScheduleBlock", back_populates="employee", cascade="all, delete-orphan")
+    schedule_overrides = relationship("ScheduleOverride", back_populates="employee", cascade="all, delete-orphan")
 
 class Order(Base):
     __tablename__ = 'orders'
@@ -308,6 +312,13 @@ class OrderInventoryData(Base):
     __table_args__ = (UniqueConstraint('order_id', 'item_id', name='_order_item_uc'),)
 
 
+# --- Tabla de asociación para Citas y Razones (Muchos a Muchos) ---
+appointment_reasons_link = Table('appointment_reasons_link', Base.metadata,
+    Column('appointment_id', Integer, ForeignKey('appointments.appointment_id', ondelete='CASCADE'), primary_key=True),
+    Column('reason_id', Integer, ForeignKey('appointment_reasons.reason_id'), primary_key=True)
+)
+
+
 class Appointment(Base):
     __tablename__ = 'appointments'
     appointment_id = Column(Integer, primary_key=True)
@@ -316,8 +327,7 @@ class Appointment(Base):
     vehicle_id = Column(Integer, ForeignKey('vehicles.vehicle_id', ondelete='SET NULL'), nullable=True)
     scheduled_by = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
     assigned_to = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
-    appointment_date = Column(TIMESTAMP(timezone=True), nullable=False)
-    reason_id = Column(Integer, ForeignKey('appointment_reasons.reason_id'), nullable=True)
+    appointment_date = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
     status_id = Column(Integer, ForeignKey('appointment_status.status_id'), nullable=True)
     notes = Column(String(256), nullable=True)
     rescheduled_count = Column(Integer, default=0)
@@ -338,7 +348,7 @@ class Appointment(Base):
     scheduler = relationship("Employee", foreign_keys=[scheduled_by])
     assignee = relationship("Employee", foreign_keys=[assigned_to])
     status = relationship("AppointmentStatus", foreign_keys=[status_id])
-    reason = relationship("AppointmentReason", foreign_keys=[reason_id])
+    reasons = relationship("AppointmentReason", secondary=appointment_reasons_link, back_populates="appointments")
 
     
 class AppointmentStatus(Base):
@@ -350,3 +360,46 @@ class AppointmentReason(Base):
     __tablename__ = 'appointment_reasons'
     reason_id = Column(Integer, primary_key=True)
     reason = Column(String(128), unique=True, nullable=False)  # e.g., Maintenance, Repair, Inspection
+    duration_minutes = Column(Integer, default=60, server_default='60', nullable=False) # Duración estimada en minutos
+
+    # Relación inversa para poder ver todas las citas de una razón
+    appointments = relationship("Appointment", secondary=appointment_reasons_link, back_populates="reasons")
+
+# --- Modelos para Horarios de Empleados ---
+
+class EmployeeScheduleBlock(Base):
+    __tablename__ = 'employee_schedule_blocks'
+    block_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey('employees.employee_id', ondelete='CASCADE'), nullable=False)
+    day_of_week = Column(Integer, nullable=False)  # 0=Lunes, 1=Martes, ..., 6=Domingo
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+
+    employee = relationship("Employee", back_populates="schedule_blocks")
+
+class ScheduleOverride(Base):
+    __tablename__ = 'schedule_overrides'
+    override_id = Column(Integer, primary_key=True)
+    employee_id = Column(Integer, ForeignKey('employees.employee_id', ondelete='CASCADE'), nullable=False)
+    override_date = Column(Date, nullable=False)
+    is_available = Column(Boolean, nullable=False)
+    start_time = Column(Time, nullable=True) # Nulo si is_available es false
+    end_time = Column(Time, nullable=True)   # Nulo si is_available es false
+    reason = Column(String(256), nullable=True) # Opcional: "Vacaciones", "Cita médica"
+    employee = relationship("Employee", back_populates="schedule_overrides")
+
+# --- Modelo para Configuración de la Empresa ---
+
+class CompanySettings(Base):
+    __tablename__ = 'company_settings'
+    
+    id = Column(Integer, primary_key=True, default=1)
+    company_name = Column(String(128), default="Mi Taller")
+    address = Column(String(256), nullable=True)
+    phone = Column(String(32), nullable=True)
+    email = Column(String(128), nullable=True)
+    website = Column(String(128), nullable=True)
+    tax_id = Column(String(64), nullable=True)
+    business_hours_start = Column(Time, nullable=True)
+    business_hours_end = Column(Time, nullable=True)
+    info = Column(String, nullable=True) # Campo para información extra

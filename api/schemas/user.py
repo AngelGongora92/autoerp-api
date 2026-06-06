@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import List, Optional, Dict, Any
+from enum import Enum
 
 class PermissionResponse(BaseModel):
     name: str
@@ -14,7 +15,6 @@ class UserResponse(BaseModel):
     is_employee: bool
     is_active: bool
 
-
 class PermissionBase(BaseModel):
     name: str
 
@@ -26,31 +26,31 @@ class UserCreate(BaseModel):
     is_employee: bool = False
     is_active: bool = True
 
-
-
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
     username: Optional[str] = None
     is_admin: Optional[bool] = None
     permissions: Optional[List[PermissionBase]] = None
 
+# --- Esquemas para Clientes y Contactos ---
+
 class CustomerCreate(BaseModel):
     is_company: bool = False
-    cname: Optional[str] = None  # Company name
-    fname: Optional[str] = None  # First name
-    lname: Optional[str] = None  # Last name
+    cname: Optional[str] = None
+    fname: Optional[str] = None
+    lname: Optional[str] = None
     address1: Optional[str] = None
     address2: Optional[str] = None
-    email: str  # Campo obligatorio para un nuevo cliente
+    email: str
     phone: Optional[str] = None
 
 class CustomerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     customer_id: int
     is_company: bool
-    cname: Optional[str] = None  # Company name
-    fname: Optional[str] = None  # First name
-    lname: Optional[str] = None  # Last name
+    cname: Optional[str] = None
+    fname: Optional[str] = None
+    lname: Optional[str] = None
     address1: Optional[str] = None
     address2: Optional[str] = None
     email: Optional[str] = None
@@ -60,9 +60,9 @@ class CustomerResponse(BaseModel):
 class CustomerUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
     is_company: Optional[bool] = None
-    cname: Optional[str] = None  # Company name
-    fname: Optional[str] = None  # First name
-    lname: Optional[str] = None  # Last name
+    cname: Optional[str] = None
+    fname: Optional[str] = None
+    lname: Optional[str] = None
     address1: Optional[str] = None
     address2: Optional[str] = None
     email: Optional[str] = None
@@ -70,11 +70,11 @@ class CustomerUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class ContactCreate(BaseModel):
-    customer_id: int  # ID del cliente al que pertenece el contacto
-    fname: str  # First name
-    lname: str  # Last name
-    email: str  # Email del contacto
-    phone: Optional[str] = None  # Teléfono del contacto
+    customer_id: int
+    fname: str
+    lname: str
+    email: str
+    phone: Optional[str] = None
 
 class ContactResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -85,19 +85,21 @@ class ContactResponse(BaseModel):
     email: str
     phone: Optional[str] = None
 
-class ContactUpdate(BaseModel):
-    fname: Optional[str] = None  # First name
-    lname: Optional[str] = None  # Last name
-    email: Optional[str] = None  # Email del contacto
-    phone: Optional[str] = None  # Teléfono del contacto
+class CustomerInfoForAppointment(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    fname: Optional[str] = None
+    lname: Optional[str] = None
+    cname: Optional[str] = None
+
+# --- Esquemas para Empleados ---
 
 class EmployeeCreate(BaseModel):
-    fname: str  # First name
-    lname1: str  # Last name
-    lname2: Optional[str] = None  # Second last name
-    email: str  # Email del empleado
-    phone: Optional[str] = None  # Teléfono del empleado
-    position: str = None  # Job position
+    fname: str
+    lname1: str
+    lname2: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    position_id: Optional[int] = None
 
 class EmployeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -110,20 +112,106 @@ class EmployeeResponse(BaseModel):
     position_id: Optional[int] = None
     is_active: bool
 
+class EmployeeUpdate(BaseModel):
+    fname: Optional[str] = None
+    lname1: Optional[str] = None
+    lname2: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    position_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+# --- Esquemas para Vehículos ---
+
+class ColorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    color_id: int
+    color: str
+
+class MotorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    motor_id: int
+    type: str
+
+class VehicleTypeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    v_type_id: int
+    type: str
+
+class VehicleMakesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    make_id: int
+    make: str
+
+class VehicleModelsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    model_id: int
+    model: str
+    make: VehicleMakesResponse
+
+class VehicleTransmissionsResponse(BaseModel):
+    transmission_id: int
+    type: str
+
+class VehicleCreate(BaseModel):
+    customer_id: Optional[int] = None
+    vin: str
+    plate: Optional[str] = None
+    year: int
+    model_id: int
+    mileage: int
+    color_id: int
+    motor_id: int
+    transmission_id: int
+    cylinders: int
+    liters: str
+    v_type_id: int
+
+class VehicleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra='ignore')
+    vehicle_id: int
+    customer_id: Optional[int] = None
+    vin: str
+    plate: Optional[str] = None
+    year: int
+    model: "VehicleModelsResponse"
+    mileage: int
+    color: ColorResponse
+    motor: MotorResponse
+    transmission: "VehicleTransmissionsResponse"
+    cylinders: int
+    liters: str
+    vehicle_type: VehicleTypeResponse
+
+class VehicleInfoForAppointment(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    year: int
+    model: "VehicleModelsResponse"
+    color: "ColorResponse"
+    plate: Optional[str] = None
+
+class ColorCreate(BaseModel):
+    color: str
+
+class MotorCreate(BaseModel):
+    type: str
+
+class VehicleTypeCreate(BaseModel):
+    type: str
+
+# --- Esquemas para Órdenes ---
+
 class CreateOrder(BaseModel):
-    c_order_id: str  # Purchase order ID
-    order_date: datetime  # Order date
-    advisor_id: Optional[int] = None  # Advisor employee ID
-    mechanic_id: Optional[int] = None  # Mechanic employee ID
-    customer_id: Optional[int] = None  # Customer ID
-    contact_id: Optional[int] = None  # Contact ID
+    c_order_id: str
+    order_date: datetime
+    advisor_id: Optional[int] = None
+    mechanic_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    contact_id: Optional[int] = None
     adm_status_id: Optional[int] = 1
     op_status_id: Optional[int] = 1
     priority_id: Optional[int] = 1
     fuel_level: Optional[int] = None
-
-
-
 
 class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -142,16 +230,15 @@ class OrderResponse(BaseModel):
     has_extra_info: Optional[bool] = None
     fuel_level: Optional[int] = None
     service_bay: Optional[str] = None
-    
 
 class OrderUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
-    c_order_id: Optional[str] = None  # Purchase order ID
-    order_date: Optional[datetime] = None  # Order date
-    advisor_id: Optional[int] = None  # Advisor employee ID
-    mechanic_id: Optional[int] = None  # Mechanic employee ID
-    customer_id: Optional[int] = None  # Customer ID
-    contact_id: Optional[int] = None  # Contact ID
+    c_order_id: Optional[str] = None
+    order_date: Optional[datetime] = None
+    advisor_id: Optional[int] = None
+    mechanic_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     p_mileage: Optional[int] = None
     c_mileage: Optional[int] = None
@@ -179,105 +266,6 @@ class OrderExtraInfoCreate(BaseModel):
     item_id: int
     info: Optional[str] = None
 
-class OrderExtraItemsCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-
-class ColorResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    color_id: int
-    color: str
-
-class MotorResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    motor_id: int
-    type: str
-
-class VehicleTypeResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    v_type_id: int
-    type: str
-
-class VehicleCreate(BaseModel):
-    customer_id: Optional[int] = None
-    vin: str
-    plate: Optional[str] = None
-    year: int
-    model_id: int
-    mileage: int
-    color_id: int
-    motor_id: int
-    transmission_id: int
-    cylinders: int
-    liters: str
-    v_type_id: int
-
-class VehicleResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True, extra='ignore')
-    vehicle_id: int
-    customer_id: Optional[int] = None
-    vin: str  # Vehicle Identification Number
-    plate: Optional[str] = None  # Plate number
-    year: int
-    model: "VehicleModelsResponse" # Nested response
-    mileage: int
-    color: ColorResponse
-    motor: MotorResponse
-    transmission: "VehicleTransmissionsResponse"
-    cylinders: int
-    liters: str  # Engine displacement in liters
-    vehicle_type: VehicleTypeResponse
-
-class VehicleUpdate(BaseModel):
-    customer_id: Optional[int] = None
-    vin: Optional[str] = None
-    plate: Optional[str] = None
-    year: Optional[int] = None
-    model_id: Optional[int] = None
-    mileage: Optional[int] = None
-    color_id: Optional[int] = None
-    motor_id: Optional[int] = None
-    transmission_id: Optional[int] = None
-    cylinders: Optional[int] = None
-    liters: Optional[str] = None
-    v_type_id: Optional[int] = None
-    
-class ColorCreate(BaseModel):
-    color: str
-
-class MotorCreate(BaseModel):
-    type: str
-
-class VehicleTypeCreate(BaseModel):
-    type: str
-
-class VehicleMakesResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    make_id: int
-    make: str
-
-class VehicleModelsResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    model_id: int
-    model: str
-    make: VehicleMakesResponse
-
-
-class VehicleTransmissionsResponse(BaseModel):
-    transmission_id: int
-    type: str
-
-class OrderExtraItemsResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    item_id: int
-    title: str
-    description: Optional[str] = None
-
-class OrderExtraInfoCreate(BaseModel):
-    order_id: int
-    item_id: int
-    info: Optional[str] = None
-
 class BodyworkDetailTypesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     detail_type_id: int
@@ -287,8 +275,6 @@ class BodyworkDetailTypesResponse(BaseModel):
 class BodyworkDetailCoordinates(BaseModel):
     x: float
     y: float
-
-from enum import Enum
 
 class BodyworkChecklistView(str, Enum):
     front = "front"
@@ -328,7 +314,6 @@ class BodyworkDetailsUpdate(BaseModel):
     coordinates: Optional[BodyworkDetailCoordinates] = None
     detail_notes: Optional[str] = None
     picture_path: Optional[str] = None
-
 
 class InventoryTypesCreate(BaseModel):
     name: str
@@ -377,15 +362,15 @@ class InventoryItemsUpdate(BaseModel):
 class InventoryItemsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     item_id: int
-    inventory_type: InventoryTypesResponse # Cambiado de 'inv_type' a 'inventory_type'
+    inv_type_id: int
     label: str
     input_type: str
     position: int
     description: Optional[str] = None
     is_mandatory: bool
     picture_upload: bool
+    inventory_type: InventoryTypesResponse
 
-# Nuevo esquema para un ítem de inventario sin la información redundante del tipo.
 class InventoryItemStrippedResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     item_id: int
@@ -396,8 +381,8 @@ class InventoryItemStrippedResponse(BaseModel):
     is_mandatory: bool
     picture_upload: bool
 
-# Nuevo esquema para la respuesta completa y estructurada.
 class InventoryItemsByTypeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     inventory_type: InventoryTypesResponse
     items: List[InventoryItemStrippedResponse]
 
@@ -417,49 +402,48 @@ class OrderInventoryDataResponse(BaseModel):
     item_id: int
     data: Optional[Dict[str, Any]] = None
 
+# --- Esquemas para Citas ---
+
 class AppointmentCreate(BaseModel):
-    # IDs para cuando la cita la crea un empleado para un cliente existente
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     scheduled_by: Optional[int] = None
     assigned_to: Optional[int] = None
-
-    # Datos para cuando la cita la crea un cliente directamente (cita rápida)
     temp_cname: Optional[str] = None
     temp_fname: Optional[str] = None
     temp_lname: Optional[str] = None
     temp_email: Optional[str] = None
     temp_phone: Optional[str] = None
     temp_vehicle_data: Optional[Dict[str, Any]] = None
-
     appointment_date: datetime
-    reason_id: int
+    reason_ids: List[int]
     status_id: int
     notes: Optional[str] = None
-
+    send_whatsapp: Optional[bool] = False
+    send_email: Optional[bool] = False
 
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     appointment_id: int
-    customer_id: int
-    contact_id: int
-    vehicle_id: int
-    scheduled_by: int
+    customer_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    scheduled_by: Optional[int] = None
     assigned_to: Optional[int] = None
     appointment_date: datetime
-    reason_id: int
-    status_id: int
     notes: Optional[str] = None
     rescheduled_count: int
-
-    # Campos temporales para mostrarlos si la cita no está vinculada
     temp_cname: Optional[str] = None
     temp_fname: Optional[str] = None
     temp_lname: Optional[str] = None
     temp_email: Optional[str] = None
     temp_phone: Optional[str] = None
     temp_vehicle_data: Optional[Dict[str, Any]] = None
+    status: Optional["AppointmentStatusResponse"] = None
+    reasons: List["AppointmentReasonResponse"] = []
+    customer: Optional[CustomerInfoForAppointment] = None
+    vehicle: Optional[VehicleInfoForAppointment] = None
 
 class AppointmentStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -470,3 +454,54 @@ class AppointmentReasonResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     reason_id: int
     reason: str
+    duration_minutes: int
+
+# --- Esquemas para Horarios de Empleados ---
+
+class EmployeeScheduleBlockBase(BaseModel):
+    day_of_week: int
+    start_time: time
+    end_time: time
+
+class EmployeeScheduleBlockCreate(EmployeeScheduleBlockBase):
+    employee_id: int
+
+class EmployeeScheduleBlockResponse(EmployeeScheduleBlockBase):
+    model_config = ConfigDict(from_attributes=True)
+    block_id: int
+    employee_id: int
+
+class ScheduleOverrideBase(BaseModel):
+    override_date: date
+    is_available: bool
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    reason: Optional[str] = None
+
+class ScheduleOverrideCreate(ScheduleOverrideBase):
+    employee_id: int
+
+class ScheduleOverrideResponse(ScheduleOverrideBase):
+    model_config = ConfigDict(from_attributes=True)
+    override_id: int
+    employee_id: int
+
+# --- Esquemas para Configuración de la Empresa ---
+
+class CompanySettingsBase(BaseModel):
+    company_name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    tax_id: Optional[str] = None
+    business_hours_start: Optional[time] = None
+    business_hours_end: Optional[time] = None
+    info: Optional[str] = None
+
+class CompanySettingsUpdate(CompanySettingsBase):
+    pass
+
+class CompanySettingsResponse(CompanySettingsBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
