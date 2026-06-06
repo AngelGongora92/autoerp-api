@@ -96,17 +96,17 @@ async def create_appointment(
         data = new_appointment.temp_vehicle_data
         vehicle_info = f"{data.get('year', '')} {data.get('make', '')} {data.get('model', '')}".strip()
 
-    # Enviar notificación de WhatsApp en segundo plano si se solicita y hay teléfono
+    # Enviar notificación de WhatsApp si se solicita y hay teléfono
     if send_whatsapp and phone:
-        background_tasks.add_task(send_whatsapp_confirmation, phone, customer_name, date_str, vehicle_info, new_appointment.appointment_id)
+        await send_whatsapp_confirmation(phone, customer_name, date_str, vehicle_info, new_appointment.appointment_id)
 
-    # Enviar notificación de correo por Brevo en segundo plano si se solicita y hay correo
+    # Enviar notificación de correo por Brevo si se solicita y hay correo
     customer_email = new_appointment.temp_email
     if not customer_email and new_appointment.customer:
         customer_email = new_appointment.customer.email
 
     if send_email and customer_email:
-        background_tasks.add_task(send_email_confirmation_brevo, customer_email, customer_name, date_str, vehicle_info, new_appointment.appointment_id)
+        await send_email_confirmation_brevo(customer_email, customer_name, date_str, vehicle_info, new_appointment.appointment_id)
 
     return new_appointment
 
