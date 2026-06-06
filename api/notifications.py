@@ -88,6 +88,7 @@ async def send_email_confirmation_brevo(email: str, customer_name: str, appointm
     BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
     BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL")
     BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "Auto ERP")
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://autoerp-fe.vercel.app")
 
     if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
         logger.warning("Faltan credenciales de Brevo. No se envió el correo de confirmación.")
@@ -223,7 +224,7 @@ async def send_email_confirmation_brevo(email: str, customer_name: str, appointm
             </div>
             
             <div class="button-container">
-                <a href="http://localhost:5173/?confirm_appointment={appointment_id}" class="btn">Ver Detalles de Cita</a>
+                <a href="{FRONTEND_URL}/?confirm_appointment={appointment_id}" class="btn">Ver Detalles de Cita</a>
             </div>
             <p style="font-size: 14px; color: #64748b; text-align: center; margin-top: 16px;">
                 Si necesitas realizar algún cambio o tienes dudas, por favor contáctanos directamente respondiendo a este correo.
