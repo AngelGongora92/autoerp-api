@@ -6,6 +6,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from .database import get_db, WhatsAppConfig, WhatsAppConversation, WhatsAppMessage, Company
+from .websocket import manager
 
 # Configurar logging
 logger = logging.getLogger("whatsapp")
@@ -163,9 +164,24 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
                         created_at=datetime.utcnow()
                     )
                     db.add(new_msg)
+                    db.flush() # Para obtener new_msg.message_id
                     logger.info(f"Mensaje entrante guardado. Compañía: {company_id}, De: {customer_phone}")
                     
-                    # TODO: Difundir mensaje por WebSocket al panel de la compañía
+                    # Difundir mensaje por WebSocket al panel de la compañía
+                    await manager.broadcast_to_company(company_id, {
+                        "event": "new_message",
+                        "data": {
+                            "message_id": new_msg.message_id,
+                            "conversation_id": conversation.conversation_id,
+                            "whatsapp_message_id": whatsapp_message_id,
+                            "direction": "inbound",
+                            "type": msg_type,
+                            "body": body,
+                            "media_url": media_url,
+                            "status": "delivered",
+                            "created_at": new_msg.created_at.isoformat()
+                        }
+                    })
 
             # 3. Procesar Actualizaciones de Estado de Envío (Statuses)
             statuses = value.get("statuses", [])
@@ -182,7 +198,15 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
                     msg_to_update.status = msg_status
                     logger.info(f"Estado de mensaje {msg_id} actualizado a: {msg_status}")
                     
-                    # TODO: Notificar cambio de estado por WebSocket
+                    # Notificar cambio de estado por WebSocket
+                    await manager.broadcast_to_company(company_id, {
+                        "event": "message_status",
+                        "data": {
+                            "whatsapp_message_id": msg_id,
+                            "status": msg_status,
+                            "conversation_id": msg_to_update.conversation_id
+                        }
+                    })
 
             db.commit()
 
