@@ -16,6 +16,7 @@ from api import vehicles as vehicles_router # Importa el router de vehículos
 from api import appointments as appointments_router # Importa el router de citas
 from api import schedules as schedules_router # Importa el router de horarios
 from api import settings as settings_router # Importa el router de configuración
+from api import whatsapp as whatsapp_router # Importa el router de WhatsApp
 
 # --- Creación de Tablas en la Base de Datos ---
 # Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
@@ -59,6 +60,7 @@ app.include_router(vehicles_router.router, prefix="/vehicles", tags=["Vehículos
 app.include_router(appointments_router.router, prefix="/appointments", tags=["Citas"])
 app.include_router(schedules_router.router, prefix="/schedules", tags=["Horarios"])
 app.include_router(settings_router.router, prefix="/settings", tags=["Configuración"])
+app.include_router(whatsapp_router.router, prefix="/whatsapp", tags=["WhatsApp"])
 
 
 @app.get("/")
