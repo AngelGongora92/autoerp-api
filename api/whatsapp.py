@@ -62,6 +62,24 @@ class MessageResponse(BaseModel):
 
 # --- Funciones Auxiliares ---
 
+def normalize_phone(phone: str) -> str:
+    """
+    Normaliza el número de teléfono quitando el '1' en los números de México (521...)
+    para que coincidan los mensajes entrantes (que traen el 1) con los salientes (que no lo requieren).
+    """
+    if not phone:
+        return phone
+    # Limpiar caracteres no numéricos
+    clean_phone = "".join(filter(str.isdigit, phone))
+    
+    # Si es un celular de México con prefijo internacional 521 y 13 dígitos
+    if clean_phone.startswith("521") and len(clean_phone) == 13:
+        # Remover el '1' en la posición 2
+        return "52" + clean_phone[3:]
+        
+    return clean_phone
+
+
 async def send_whatsapp_message(phone_number_id: str, token: str, to: str, text: str) -> str:
     """
     Realiza la llamada HTTP asíncrona a Meta Graph API para enviar un mensaje de texto.
@@ -191,14 +209,14 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
             contacts = value.get("contacts", [])
 
             for message in messages:
-                customer_phone = message.get("from")
+                customer_phone = normalize_phone(message.get("from"))
                 whatsapp_message_id = message.get("id")
                 msg_type = message.get("type", "text")
 
                 # Obtener el nombre de perfil de WhatsApp del contacto si está disponible
                 customer_name = None
                 if contacts:
-                    contact_match = next((c for c in contacts if c.get("wa_id") == customer_phone), None)
+                    contact_match = next((c for c in contacts if normalize_phone(c.get("wa_id")) == customer_phone), None)
                     if contact_match:
                         customer_name = contact_match.get("profile", {}).get("name")
 
