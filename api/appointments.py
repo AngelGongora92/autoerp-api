@@ -185,9 +185,9 @@ async def cancel_public_appointment(
     # Verificar si existe el estado 3 en la base de datos, si no, lo insertamos
     status_canceled = db.scalar(select(AppointmentStatus).where(AppointmentStatus.status_id == 3))
     if not status_canceled:
-        status_canceled = AppointmentStatus(status_id=3, status="cancelado")
-        db.add(status_canceled)
-        db.commit()
+      status_canceled = AppointmentStatus(status_id=3, status="cancelado")
+      db.add(status_canceled)
+      db.flush()  # Usar flush para asegurar que el registro exista antes de asociarlo
         
     appointment.status_id = 3  # Cancelado
     db.commit()
