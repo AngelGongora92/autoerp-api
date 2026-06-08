@@ -89,7 +89,18 @@ async def create_appointment(
         phone = customer.phone
     
     # 3. Fecha
-    date_str = new_appointment.appointment_date.strftime("%d/%m/%Y a las %H:%M")
+    import datetime as dt_module
+    from zoneinfo import ZoneInfo
+    
+    # Asegurar que la fecha sea aware (en UTC) para hacer la conversión de zona horaria
+    appt_dt = new_appointment.appointment_date
+    if appt_dt.tzinfo is None:
+        appt_dt = appt_dt.replace(tzinfo=dt_module.timezone.utc)
+        
+    # Convertir a la hora local del taller (America/Mexico_City)
+    local_tz = ZoneInfo("America/Mexico_City")
+    local_appt_date = appt_dt.astimezone(local_tz)
+    date_str = local_appt_date.strftime("%d/%m/%Y a las %H:%M")
 
     # 4. Vehículo
     vehicle_info = "Vehículo no especificado"
