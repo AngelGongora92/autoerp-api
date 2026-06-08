@@ -37,6 +37,15 @@ user_permissions = Table('user_permissions', Base.metadata,
     Column('permission_id', Integer, ForeignKey('permissions.permission_id'), primary_key=True)
 )
 
+# Modelo de Compañía/Taller (tabla 'companies')
+class Company(Base):
+    __tablename__ = 'companies'
+    company_id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    is_active = Column(Boolean, default=True)
+
+
 # Modelo de Usuario (tabla 'users')
 class User(Base):
     __tablename__ = 'users'
@@ -46,7 +55,10 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_employee = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
 
+    # Relaciones
+    company = relationship('Company')
     # Relación de muchos a muchos con el modelo Permission
     permissions = relationship('Permission', secondary=user_permissions, lazy='subquery',
                                   backref='users')
@@ -403,3 +415,48 @@ class CompanySettings(Base):
     business_hours_start = Column(Time, nullable=True)
     business_hours_end = Column(Time, nullable=True)
     info = Column(String, nullable=True) # Campo para información extra
+
+
+# --- Modelos para la Integración de WhatsApp ---
+
+class WhatsAppConfig(Base):
+    __tablename__ = 'whatsapp_configs'
+    config_id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='CASCADE'), nullable=False, unique=True)
+    phone_number_id = Column(String(64), unique=True, nullable=False)
+    waba_id = Column(String(64), nullable=False)
+    access_token = Column(String(512), nullable=False)
+    phone_number = Column(String(32), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    company = relationship("Company")
+
+
+class WhatsAppConversation(Base):
+    __tablename__ = 'whatsapp_conversations'
+    conversation_id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='CASCADE'), nullable=False)
+    customer_phone = Column(String(32), nullable=False)
+    customer_name = Column(String(128), nullable=True)
+    last_message_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    company = relationship("Company")
+    messages = relationship("WhatsAppMessage", back_populates="conversation", cascade="all, delete-orphan")
+
+    __table_args__ = (UniqueConstraint('company_id', 'customer_phone', name='_company_customer_phone_uc'),)
+
+
+class WhatsAppMessage(Base):
+    __tablename__ = 'whatsapp_messages'
+    message_id = Column(Integer, primary_key=True)
+    conversation_id = Column(Integer, ForeignKey('whatsapp_conversations.conversation_id', ondelete='CASCADE'), nullable=False)
+    whatsapp_message_id = Column(String(128), unique=True, nullable=True)
+    direction = Column(String(16), nullable=False) # 'inbound' o 'outbound'
+    type = Column(String(16), default='text', nullable=False) # 'text', 'image', 'document', 'system'
+    body = Column(String(1024), nullable=True)
+    media_url = Column(String(512), nullable=True)
+    status = Column(String(16), default='sent', nullable=False) # 'sent', 'delivered', 'read', 'failed'
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    conversation = relationship("WhatsAppConversation", back_populates="messages")
