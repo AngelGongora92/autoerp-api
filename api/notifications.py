@@ -2,6 +2,8 @@ import os
 import httpx
 import logging
 import traceback
+from api.database import SessionLocal, WhatsAppConfig
+from sqlalchemy import select
 
 # Configuración de logging para ver qué pasa en la consola
 logging.basicConfig(level=logging.INFO)
@@ -17,15 +19,34 @@ async def send_whatsapp_confirmation(phone_number: str, customer_name: str, appo
     Envía un mensaje de WhatsApp usando la API de Meta.
     Se ejecuta en segundo plano (Background Task).
     """
-    if not META_TOKEN or not META_PHONE_ID:
-        logger.warning("Faltan credenciales de Meta. No se envió el WhatsApp.")
+    # Intentar obtener la configuración desde la base de datos
+    db_token = None
+    db_phone_id = None
+    db = None
+    try:
+        db = SessionLocal()
+        config = db.scalars(select(WhatsAppConfig).where(WhatsAppConfig.company_id == 1)).first()
+        if config:
+            db_token = config.access_token
+            db_phone_id = config.phone_number_id
+    except Exception as e:
+        logger.error(f"Error al obtener config de WhatsApp de la base de datos: {e}")
+    finally:
+        if db:
+            db.close()
+
+    token = db_token or META_TOKEN
+    phone_id = db_phone_id or META_PHONE_ID
+
+    if not token or not phone_id:
+        logger.warning("Faltan credenciales de Meta (tanto en DB como en .env). No se envió el WhatsApp.")
         return
 
     # URL de la API de Graph (usando v22.0 como en tu curl)
-    url = f"https://graph.facebook.com/v22.0/{META_PHONE_ID}/messages"
+    url = f"https://graph.facebook.com/v22.0/{phone_id}/messages"
     
     headers = {
-        "Authorization": f"Bearer {META_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
