@@ -28,6 +28,13 @@ JWKS_URL = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
 # Inicializar cliente JWKS de PyJWT
 jwks_client = jwt.PyJWKClient(JWKS_URL)
 
+# Diagnóstico de importación de cryptography
+crypto_error = None
+try:
+    import cryptography
+except Exception as e:
+    crypto_error = f"Error al importar cryptography: {type(e).__name__} - {str(e)}"
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -79,9 +86,12 @@ async def get_current_user(
         )
     except jwt.InvalidTokenError as e:
         logger.error(f"Error decodificando JWT: {str(e)}")
+        err_msg = f"Token de sesión inválido: {str(e)}"
+        if crypto_error:
+            err_msg += f" | DIAGNOSTICO: {crypto_error}"
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de sesión inválido."
+            detail=err_msg
         )
 
     # Buscar el usuario en la base de datos local por su supabase_uid
