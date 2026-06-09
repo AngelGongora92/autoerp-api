@@ -30,3 +30,4 @@ certifi==2026.5.20
 httpcore==1.0.9
 httpx==0.28.1
 PyJWT==2.8.0
+cryptography==42.0.5
