@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData
+from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData, User
 from sqlalchemy.orm import joinedload, Session
 from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse, BodyworkDetailTypesResponse, BodyworkDetailTypesCreate, BodyworkDetailsResponse, BodyworkDetailsCreate, BodyworkDetailTypesUpdate, BodyworkDetailsUpdate, InventoryTypesResponse, InventoryTypesCreate, InventoryItemsCreate, InventoryItemsResponse, InventoryItemsByTypeResponse, InventoryItemReorder, OrderInventoryDataCreate, OrderInventoryDataResponse, InventoryTypesReorder, InventoryTypesUpdate, InventoryItemsUpdate
 from .database import InventoryTypes, InventoryItems, OrderInventoryData
+from api.auth_deps import get_current_user
 
 router = APIRouter()
 
@@ -15,6 +16,7 @@ router = APIRouter()
 async def create_order(
     order_data: CreateOrder,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Crea una nueva orden en la base de datos.
@@ -26,6 +28,7 @@ async def create_order(
     # usando el diccionario. Esto garantiza que todos los campos
     # de Pydantic se asignen correctamente.
     new_order = Order(**order_dict)
+    new_order.company_id = current_user.company_id
 
     db.add(new_order)
     db.commit()
@@ -38,13 +41,16 @@ async def update_order(
     order_id: int,
     order_data: OrderUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Actualiza una orden existente de forma parcial.
     """
-    order = db.get(Order, order_id)
+    order = db.scalar(
+        select(Order).where(Order.order_id == order_id, Order.company_id == current_user.company_id)
+    )
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found or access denied")
 
     # Convierte el modelo Pydantic a un diccionario, excluyendo campos no enviados
     update_data = order_data.model_dump(exclude_unset=True)
@@ -62,11 +68,12 @@ async def update_order(
 @router.get("/", response_model=List[OrderResponse])
 async def get_all_orders(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene una lista de todas las órdenes.
     """
-    stmt = select(Order)
+    stmt = select(Order).where(Order.company_id == current_user.company_id)
     orders = db.scalars(stmt).unique().all()
     return orders
 
@@ -75,13 +82,16 @@ async def get_all_orders(
 async def get_order_by_id(
     order_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene orden por ID
     """
-    order = db.get(Order, order_id)
+    order = db.scalar(
+        select(Order).where(Order.order_id == order_id, Order.company_id == current_user.company_id)
+    )
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Order not found or access denied")
     return order
 
 
@@ -89,14 +99,15 @@ async def get_order_by_id(
 async def get_order_by_custom_id(
     c_order_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene orden por el custom_ID
     """
-    stmt = select(Order).where(Order.c_order_id == c_order_id)
+    stmt = select(Order).where(Order.c_order_id == c_order_id, Order.company_id == current_user.company_id)
     order = db.scalars(stmt).first()
     if not order:
-        raise HTTPException(status_code=404, detail=f"Order with custom ID '{c_order_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Order with custom ID '{c_order_id}' not found or access denied")
     return order
 
 @router.get("/extra-items/", response_model=List[OrderExtraItemsResponse])
@@ -305,21 +316,25 @@ async def create_bodywork_details(
 async def check_order_exists(
     c_order_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Verifica si una orden existe.
     """
-    order = db.get(Order, c_order_id)
+    order = db.scalar(
+        select(Order).where(Order.c_order_id == c_order_id, Order.company_id == current_user.company_id)
+    )
     return order is not None
 
 @router.get("/last-order-id/", response_model=Optional[int])
 async def get_last_order_id(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene el ID de la última orden.
     """
-    stmt = select(Order).order_by(Order.order_id.desc())
+    stmt = select(Order).where(Order.company_id == current_user.company_id).order_by(Order.order_id.desc())
     last_order = db.scalars(stmt).first()
     if last_order:
         return last_order.c_order_id

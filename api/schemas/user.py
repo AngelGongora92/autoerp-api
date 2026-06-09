@@ -14,23 +14,34 @@ class UserResponse(BaseModel):
     permissions: List[PermissionResponse] = []
     is_employee: bool
     is_active: bool
+    company_id: Optional[int] = None
+    supabase_uid: Optional[str] = None
+    employee_id: Optional[int] = None
+    employee: Optional["EmployeeResponse"] = None
 
 class PermissionBase(BaseModel):
     name: str
 
 class UserCreate(BaseModel):
     username: str
-    password: str # Campo obligatorio para un nuevo usuario
+    password: Optional[str] = None # Con Supabase, la contraseña local puede ser opcional
     is_admin: bool = False
     permissions: List[PermissionBase] = []
     is_employee: bool = False
     is_active: bool = True
+    company_id: Optional[int] = None
+    supabase_uid: Optional[str] = None
+    employee_id: Optional[int] = None
 
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
     username: Optional[str] = None
     is_admin: Optional[bool] = None
     permissions: Optional[List[PermissionBase]] = None
+    is_active: Optional[bool] = None
+    company_id: Optional[int] = None
+    supabase_uid: Optional[str] = None
+    employee_id: Optional[int] = None
 
 # --- Esquemas para Clientes y Contactos ---
 
@@ -94,6 +105,14 @@ class CustomerInfoForAppointment(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
 
+# --- Esquemas para Cargos / Posiciones ---
+
+class PositionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    position_id: int
+    title: str
+    description: Optional[str] = None
+
 # --- Esquemas para Empleados ---
 
 class EmployeeCreate(BaseModel):
@@ -114,6 +133,7 @@ class EmployeeResponse(BaseModel):
     phone: Optional[str] = None
     position_id: Optional[int] = None
     is_active: bool
+    position: Optional[PositionResponse] = None
 
 class EmployeeUpdate(BaseModel):
     fname: Optional[str] = None

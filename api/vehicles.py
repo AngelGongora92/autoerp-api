@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from typing import List
-from .database import get_db, Vehicle, Color, Motor, VehicleType, Make, Model, Transmission
+from .database import get_db, Vehicle, Color, Motor, VehicleType, Make, Model, Transmission, User
 from .schemas.user import VehicleResponse, VehicleCreate, ColorResponse, ColorCreate, MotorResponse, MotorCreate, VehicleTypeResponse, VehicleTypeCreate, VehicleMakesResponse, VehicleModelsResponse, VehicleTransmissionsResponse
 from fastapi import status
 from fastapi.exceptions import HTTPException
+from api.auth_deps import get_current_user
 
 
 router = APIRouter()
@@ -14,13 +15,14 @@ router = APIRouter()
 async def get_vehicles_by_id(
     customer_id: int,  # FastAPI espera un entero del parámetro de ruta
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene una lista de todos los vehículos de un cliente específico.
     """
     stmt = (
         select(Vehicle)
-        .filter(Vehicle.customer_id == customer_id)
+        .filter(Vehicle.customer_id == customer_id, Vehicle.company_id == current_user.company_id)
         .options(joinedload(Vehicle.color), joinedload(Vehicle.motor), joinedload(Vehicle.vehicle_type))
     )
     vehicles = db.scalars(stmt).unique().all()
@@ -31,52 +33,57 @@ async def get_vehicles_by_id(
 async def create_vehicle(
     vehicle_data: VehicleCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Crea un nuevo vehículo en la base de datos.
     """
-    # 1. Verificar duplicidad de VIN
+    # 1. Verificar duplicidad de VIN en esta misma empresa
     if vehicle_data.vin:
         existing_vin = db.scalars(
-            select(Vehicle).where(Vehicle.vin == vehicle_data.vin)
+            select(Vehicle).where(Vehicle.vin == vehicle_data.vin, Vehicle.company_id == current_user.company_id)
         ).first()
         if existing_vin:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="El vehículo con este número VIN ya existe"
+                detail="El vehículo con este número VIN ya existe en tu taller."
             )
 
-    # 2. Verificar duplicidad de Placas
+    # 2. Verificar duplicidad de Placas en esta misma empresa
     if vehicle_data.plate:
         existing_plate = db.scalars(
-            select(Vehicle).where(Vehicle.plate == vehicle_data.plate)
+            select(Vehicle).where(Vehicle.plate == vehicle_data.plate, Vehicle.company_id == current_user.company_id)
         ).first()
         if existing_plate:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="El vehículo con estas placas ya existe"
+                detail="El vehículo con estas placas ya existe en tu taller."
             )
 
     new_vehicle = Vehicle(**vehicle_data.model_dump())
+    new_vehicle.company_id = current_user.company_id
     db.add(new_vehicle)
     db.commit()
     db.refresh(new_vehicle)
     return new_vehicle
 
-@router.get("/{vehicle_id}", response_model=VehicleResponse)
+@router.get("/v/{vehicle_id}", response_model=VehicleResponse)
 async def get_vehicle_by_id(
     vehicle_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene un solo vehículo por su ID.
     """
-    vehicle = db.get(Vehicle, vehicle_id)
+    vehicle = db.scalar(
+        select(Vehicle).where(Vehicle.vehicle_id == vehicle_id, Vehicle.company_id == current_user.company_id)
+    )
 
     if not vehicle:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vehicle not found"
+            detail="Vehículo no encontrado o acceso denegado"
         )
     
     return vehicle

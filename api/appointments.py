@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer
+from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User
+from api.auth_deps import get_current_user
 from .schemas.user import AppointmentCreate, AppointmentResponse, AppointmentStatusResponse, AppointmentReasonResponse
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
@@ -84,6 +85,7 @@ router = APIRouter()
 async def get_appointments(
     assigned_to: Optional[int] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene citas. Si se envía 'assigned_to', filtra por empleado.
@@ -100,6 +102,7 @@ async def get_appointments(
                 .joinedload(Vehicle.model)
                 .joinedload(Model.make) # Cargar el modelo y la marca del vehículo
         ) 
+        .where(Appointment.company_id == current_user.company_id)
     )
 
     if assigned_to:
@@ -113,6 +116,7 @@ async def create_appointment(
     appointment_data: AppointmentCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Crea una nueva cita en la base de datos.
@@ -139,6 +143,7 @@ async def create_appointment(
 
     # 2. Crear la instancia de la cita (sin las razones todavía)
     new_appointment = Appointment(**data)
+    new_appointment.company_id = current_user.company_id
 
     # 3. Buscar las razones en la DB y asignarlas (SQLAlchemy maneja la tabla intermedia)
     if reason_ids:
@@ -234,11 +239,15 @@ async def cancel_public_appointment(
 async def reschedule_appointment(
     appointment_id: int,
     payload: RescheduleRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    appointment = db.get(Appointment, appointment_id)
+    appointment = db.scalar(select(Appointment).where(
+        Appointment.appointment_id == appointment_id,
+        Appointment.company_id == current_user.company_id
+    ))
     if not appointment:
-        raise HTTPException(status_code=404, detail="Cita no encontrada")
+        raise HTTPException(status_code=404, detail="Cita no encontrada o acceso denegado")
 
     # Validación de fecha y hora futura
     now = datetime.now(dt_module.timezone.utc)
@@ -272,11 +281,15 @@ async def reschedule_appointment(
 @router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
 async def cancel_appointment(
     appointment_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    appointment = db.get(Appointment, appointment_id)
+    appointment = db.scalar(select(Appointment).where(
+        Appointment.appointment_id == appointment_id,
+        Appointment.company_id == current_user.company_id
+    ))
     if not appointment:
-        raise HTTPException(status_code=404, detail="Cita no encontrada")
+        raise HTTPException(status_code=404, detail="Cita no encontrada o acceso denegado")
         
     # Verificar si existe el estado 3 (cancelado) en la base de datos
     status_canceled = db.scalar(select(AppointmentStatus).where(AppointmentStatus.status_id == 3))
@@ -295,11 +308,15 @@ async def cancel_appointment(
 async def resend_appointment_confirmation(
     appointment_id: int,
     payload: ResendConfirmationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    appointment = db.get(Appointment, appointment_id)
+    appointment = db.scalar(select(Appointment).where(
+        Appointment.appointment_id == appointment_id,
+        Appointment.company_id == current_user.company_id
+    ))
     if not appointment:
-        raise HTTPException(status_code=404, detail="Cita no encontrada")
+        raise HTTPException(status_code=404, detail="Cita no encontrada o acceso denegado")
         
     await notify_appointment_confirmation(appointment, payload.send_whatsapp, payload.send_email, db)
     return {"status": "ok", "message": "Confirmación reenviada correctamente"}

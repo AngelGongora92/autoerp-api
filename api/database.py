@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, backref
 from api.schemas.user import BodyworkChecklistView # Importar el Enum
 from .hashing import verify_password
 from datetime import datetime
@@ -56,9 +56,12 @@ class User(Base):
     is_employee = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+    supabase_uid = Column(String(64), unique=True, nullable=True, index=True)
+    employee_id = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
 
     # Relaciones
     company = relationship('Company')
+    employee = relationship('Employee', backref=backref('user', uselist=False))
     # Relación de muchos a muchos con el modelo Permission
     permissions = relationship('Permission', secondary=user_permissions, lazy='subquery',
                                   backref='users')
@@ -88,6 +91,9 @@ class Customer(Base):
     email = Column(String(128), nullable=False)
     phone = Column(String(32), nullable=True)
     is_active = Column(Boolean, default=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+
+    company = relationship('Company')
     orders = relationship("Order", back_populates="customer")
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
     vehicles = relationship("Vehicle", back_populates="customer", cascade="all, delete-orphan")
@@ -121,6 +127,9 @@ class Employee(Base):
     phone = Column(String(32), nullable=True)
     position_id = Column(Integer, ForeignKey('positions.position_id'))
     is_active = Column(Boolean, default=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+
+    company = relationship('Company')
     position = relationship("Position", back_populates="employees")
     advised_orders = relationship("Order", foreign_keys='Order.advisor_id', back_populates="advisor")
     mechanic_orders = relationship("Order", foreign_keys='Order.mechanic_id', back_populates="mechanic")
@@ -138,7 +147,10 @@ class Order(Base):
     mechanic_id = Column(Integer, ForeignKey('employees.employee_id', ondelete='SET NULL'), nullable=True)
     customer_id = Column(Integer, ForeignKey('customers.customer_id', ondelete='SET NULL'), nullable=True)
     contact_id = Column(Integer, ForeignKey('contacts.contact_id', ondelete='SET NULL'), nullable=True)
-    vehicle_id = Column(Integer, ForeignKey('vehicles.vehicle_id'), nullable=True) # Order status ID
+    vehicle_id = Column(Integer, ForeignKey('vehicles.vehicle_id'), nullable=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+
+    company = relationship('Company') # Order status ID
     op_status_id = Column(Integer, ForeignKey('op_status.op_status_id'), nullable=True)  # Approval status ID
     adm_status_id = Column(Integer, ForeignKey('adm_status.adm_status_id'), nullable=True)  # Priority ID
     priority_id = Column(Integer, ForeignKey('priority.priority_id'), nullable=True)
@@ -215,6 +227,9 @@ class Vehicle(Base):
     cylinders = Column(Integer, nullable=False)
     liters = Column(String(16), nullable=False)  # Engine displacement in liters
     v_type_id = Column(Integer, ForeignKey('vehicle_types.v_type_id'), nullable=False)  # Vehicle type (e.g., sedan, SUV)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+
+    company = relationship('Company')
 
     orders = relationship("Order", back_populates="vehicle")
     customer = relationship("Customer", foreign_keys=[customer_id], back_populates="vehicles")
@@ -343,6 +358,9 @@ class Appointment(Base):
     status_id = Column(Integer, ForeignKey('appointment_status.status_id'), nullable=True)
     notes = Column(String(256), nullable=True)
     rescheduled_count = Column(Integer, default=0)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+
+    company = relationship('Company')
 
     #Temporal fields
     temp_cname = Column(String(64), nullable=True)  # Temporary company name

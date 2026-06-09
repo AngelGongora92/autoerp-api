@@ -8,6 +8,7 @@ from .schemas.user import CustomerResponse, CustomerUpdate, CustomerCreate, Cont
 
 # Reutilizamos la dependencia get_db y los modelos
 from .database import User, Permission, Customer, get_db, Contact
+from api.auth_deps import get_current_user
 
 
 # --- Creación del Router ---
@@ -16,11 +17,12 @@ router = APIRouter()
 @router.get("/", response_model=List[CustomerResponse])
 async def get_all_customers(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene una lista de todos los clientes.
     """
-    stmt = select(Customer)
+    stmt = select(Customer).where(Customer.company_id == current_user.company_id)
     customers = db.scalars(stmt).unique().all()
     return customers
 
@@ -29,6 +31,7 @@ async def get_all_customers(
 async def search_customers_by_name(
     full_name: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Busca clientes por nombre completo (concatenando fname y lname) o por nombre de compañía.
@@ -39,8 +42,9 @@ async def search_customers_by_name(
     # Esto permite búsquedas como "Angel Gongora" aunque estén en campos separados.
     full_name_db = func.concat(Customer.fname, ' ', Customer.lname)
     
-    # Construir la consulta para buscar en el nombre completo concatenado o en el nombre de la compañía
+    # Construir la consulta para buscar en el nombre completo concatenado o en el nombre de la compañía, filtrado por empresa
     stmt = select(Customer).where(
+        Customer.company_id == current_user.company_id,
         (full_name_db.ilike(search_term)) |
         (Customer.cname.ilike(search_term))
     )
@@ -55,18 +59,22 @@ async def search_customers_by_name(
 async def create_customer(
     customer_data: CustomerCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Crea un nuevo customer en la base de datos.
     """
-    # 1. Verificar si el email ya está en uso
+    # 1. Verificar si el email ya está en uso en esta misma empresa
     existing_customer = db.scalars(
-        select(Customer).where(Customer.email == customer_data.email)
+        select(Customer).where(
+            Customer.email == customer_data.email, 
+            Customer.company_id == current_user.company_id
+        )
     ).first()
     if existing_customer:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="El email ya está en uso"
+            detail="El email ya está en uso en este taller."
         )
 
     # 2. Preparar los datos del nuevo customer
@@ -78,7 +86,8 @@ async def create_customer(
         address1=customer_data.address1,
         address2=customer_data.address2,
         email=customer_data.email,
-        phone=customer_data.phone
+        phone=customer_data.phone,
+        company_id=current_user.company_id
     )
 
     db.add(new_customer)
@@ -91,17 +100,19 @@ async def create_customer(
 async def get_customer_by_id(
     customer_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene un solo customer por su ID.
     """
-    # Usamos db.get() para buscar el usuario por su ID de manera más directa
-    customer = db.get(Customer, customer_id)
+    customer = db.scalar(
+        select(Customer).where(Customer.customer_id == customer_id, Customer.company_id == current_user.company_id)
+    )
 
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
+            detail="Cliente no encontrado o acceso denegado."
         )
     
     return customer
@@ -112,27 +123,28 @@ async def update_customer(
     customer_id: int,
     customer_data: CustomerUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Actualiza un customer existente.
     """
-    customer = db.get(Customer, customer_id)
+    customer = db.scalar(
+        select(Customer).where(Customer.customer_id == customer_id, Customer.company_id == current_user.company_id)
+    )
 
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
+            detail="Cliente no encontrado o acceso denegado."
         )
     
     # Convertir el modelo Pydantic a un diccionario, excluyendo campos no enviados
     update_data = customer_data.model_dump(exclude_unset=True)
 
- 
     for key, value in update_data.items():
         setattr(customer, key, value)
 
     db.add(customer)
-
     db.commit()
     db.refresh(customer)
     return customer
@@ -142,16 +154,19 @@ async def update_customer(
 async def delete_customer_by_id(
     customer_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Elimina un usuario de la base de datos por su ID.
     """
-    customer = db.get(Customer, customer_id)
+    customer = db.scalar(
+        select(Customer).where(Customer.customer_id == customer_id, Customer.company_id == current_user.company_id)
+    )
 
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
+            detail="Cliente no encontrado o acceso denegado."
         )
 
     db.delete(customer)
@@ -162,16 +177,19 @@ async def delete_customer_by_id(
 async def get_contacts_by_customer(
     customer_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene todos los contactos asociados a un cliente específico.
     """
-    # Verificar si el cliente existe
-    customer = db.get(Customer, customer_id)
+    # Verificar si el cliente existe y pertenece a la misma empresa
+    customer = db.scalar(
+        select(Customer).where(Customer.customer_id == customer_id, Customer.company_id == current_user.company_id)
+    )
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
+            detail="Cliente no encontrado o acceso denegado."
         )
     
     # Obtener los contactos asociados al cliente
