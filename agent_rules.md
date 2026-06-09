@@ -4,6 +4,15 @@ Este archivo contiene las reglas obligatorias que todo agente de IA (como Antigr
 
 ---
 
+## 📍 Identidad y Ruta del Proyecto (Backend)
+
+*   **Nombre del Proyecto:** AutoERP API (Servicio Backend)
+*   **Ruta Base Absoluta Local:** `/Users/rafipacheco/autoerp-api-run`
+*   **Repositorio Remoto Git:** `AngelGongora92/autoerp-api`
+*   **Validación de Ámbito:** Antes de realizar cualquier lectura, creación o modificación de archivos, el agente debe verificar que el archivo en cuestión se encuentre estrictamente dentro de la ruta base anterior. **PROHIBIDO** modificar código de otros proyectos (como portales de transparencia u otros frontends) que aparezcan abiertos en el contexto o workspaces activos del IDE.
+
+---
+
 ## 📋 1. Flujo de Trabajo y Gestión de Tickets (Linear & Git)
 
 Antes de modificar cualquier parte del código, el agente debe seguir obligatoriamente este ciclo de vida:
