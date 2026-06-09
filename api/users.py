@@ -40,13 +40,9 @@ async def register_new_company_and_user(
     Verifica la sesión decodificando el token de Supabase Auth directamente.
     """
     try:
-        # Decodificar el token de Supabase directamente para verificar la identidad
-        decoded = jwt.decode(
-            payload.token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False}
-        )
+        # Decodificar el token de Supabase usando el decodificador híbrido compartido
+        from api.auth_deps import decode_supabase_token
+        decoded = decode_supabase_token(payload.token)
         supabase_uid = decoded.get("sub")
         email = decoded.get("email") or decoded.get("username")
         if not supabase_uid or not email:
@@ -54,6 +50,11 @@ async def register_new_company_and_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="El token de Supabase no contiene información de usuario válida."
             )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="El token de Supabase ha expirado."
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

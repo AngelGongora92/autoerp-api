@@ -35,6 +35,34 @@ try:
 except Exception as e:
     crypto_error = f"Error al importar cryptography: {type(e).__name__} - {str(e)}"
 
+def decode_supabase_token(token: str) -> dict:
+    """
+    Decodifica y valida un token JWT de Supabase.
+    Soporta algoritmos simétricos (HS256 local) y asimétricos (ES256 en producción).
+    """
+    unverified_header = jwt.get_unverified_header(token)
+    alg = unverified_header.get("alg", "HS256")
+    
+    if alg == "HS256":
+        # Decodificación simétrica clásica (Desarrollo local con Mock Auth)
+        return jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud": False}
+        )
+    elif alg == "ES256":
+        # Decodificación asimétrica dinámica usando JWKS (Producción con Supabase real)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["ES256"],
+            options={"verify_aud": False}
+        )
+    else:
+        raise jwt.InvalidAlgorithmError(f"Algoritmo de token '{alg}' no soportado.")
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -45,33 +73,7 @@ async def get_current_user(
     """
     token = credentials.credentials
     try:
-        # Leer el encabezado para identificar si es token simétrico (desarrollo) o asimétrico (producción)
-        unverified_header = jwt.get_unverified_header(token)
-        alg = unverified_header.get("alg", "HS256")
-        
-        if alg == "HS256":
-            # Decodificación simétrica clásica (Desarrollo local con Mock Auth)
-            payload = jwt.decode(
-                token,
-                SUPABASE_JWT_SECRET,
-                algorithms=["HS256"],
-                options={"verify_aud": False}
-            )
-        elif alg == "ES256":
-            # Decodificación asimétrica dinámica usando JWKS (Producción con Supabase real)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["ES256"],
-                options={"verify_aud": False}
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Algoritmo de token '{alg}' no soportado."
-            )
-        
+        payload = decode_supabase_token(token)
         supabase_uid = payload.get("sub")
         if not supabase_uid:
             raise HTTPException(
@@ -84,7 +86,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="El token de sesión ha expirado."
         )
-    except jwt.InvalidTokenError as e:
+    except Exception as e:
         logger.error(f"Error decodificando JWT: {str(e)}")
         err_msg = f"Token de sesión inválido: {str(e)}"
         if crypto_error:
