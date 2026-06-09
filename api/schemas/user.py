@@ -87,9 +87,12 @@ class ContactResponse(BaseModel):
 
 class CustomerInfoForAppointment(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    customer_id: Optional[int] = None
     fname: Optional[str] = None
     lname: Optional[str] = None
     cname: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
 # --- Esquemas para Empleados ---
 
