@@ -1,12 +1,15 @@
 import logging
+import jwt
+import time
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 # Importa las clases y la sesión desde el nuevo archivo database.py
 from .database import User, Permission, get_db
+from api.auth_deps import SUPABASE_JWT_SECRET
 
 # Configuración básica de logging
 logging.basicConfig(level=logging.INFO)
@@ -28,9 +31,8 @@ class UserLogin(BaseModel):
 class LoginResponse(BaseModel):
     message: str
     permissions: List[str]
-    # En un sistema real, aquí devolverías un token de acceso:
-    # access_token: str
-    # token_type: str = "bearer"
+    access_token: Optional[str] = None
+    supabase_uid: Optional[str] = None
 
 
 # --- Rutas de Autenticación ---
@@ -59,10 +61,21 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             user_permissions.append(perm.name)
 
         logging.info(f"Login exitoso para el usuario: {user_data.username}")
+        
+        # Generar un JWT token mock firmado para desarrollo local
+        payload = {
+            "sub": user.supabase_uid or f"mock-{user.user_id}",
+            "email": user.username,
+            "role": "authenticated",
+            "exp": int(time.time()) + 3600 * 24 # 24 horas
+        }
+        token = jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm="HS256")
+
         return {
             "message": "¡Inicio de sesión exitoso!",
             "permissions": user_permissions,
-            # "access_token": "aqui_iria_un_jwt_token_real",
+            "access_token": token,
+            "supabase_uid": user.supabase_uid
         }
 
     # Si el usuario no existe o la contraseña es incorrecta, lanza una excepción
