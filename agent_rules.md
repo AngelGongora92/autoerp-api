@@ -9,7 +9,7 @@ Este archivo contiene las reglas obligatorias que todo agente de IA (como Antigr
 *   **Nombre del Proyecto:** AutoERP API (Servicio Backend)
 *   **Ruta Base:** Directorio raíz del repositorio donde se encuentra este archivo `agent_rules.md`.
 *   **Repositorio Remoto Git:** `AngelGongora92/autoerp-api`
-*   **Validación de Ámbito:** Antes de realizar cualquier lectura, creación o modificación de archivos, el agente debe verificar que el archivo en cuestión se encuentre estrictamente dentro del ámbito del repositorio (directorio contenedor de este archivo `agent_rules.md` y sus subcarpetas). **PROHIBIDO** modificar código de otros proyectos (como portales de transparencia u otros frontends) que aparezcan abiertos en el contexto o workspaces activos del IDE.
+*   **Validación de Ámbito:** Antes de realizar cualquier lectura, creación o modificación de archivos, el agente debe verificar que el archivo en cuestión se encuentre estrictamente dentro del ámbito del repositorio (directorio contenedor de este archivo `agent_rules.md` y sus subcarpetas). **PROHIBIDO** modificar código de otros proyectos o carpetas fuera de este repositorio.
 
 ---
 
@@ -39,7 +39,7 @@ Antes de modificar cualquier parte del código, el agente debe seguir obligatori
 
 ---
 
-## 🗄️ 2. Base de Datos y Modelos (PostgreSQL + SQLAlchemy)
+## 🗄️ 2. Base de Datos y Modelos (PostgreSQL + SQLAlchemy + Alembic)
 
 Para evitar pérdidas de integridad en datos históricos e inconsistencias de claves foráneas:
 
@@ -55,6 +55,12 @@ Para evitar pérdidas de integridad en datos históricos e inconsistencias de cl
      ```
      para prevenir errores de clave duplicada (`UniqueViolation`) en futuros inserts autoincrementales de producción o pruebas.
 
+3. **Migraciones:**
+   * Cualquier modificación en los modelos de SQLAlchemy que altere la base de datos debe incluir su respectivo script de migración generado mediante Alembic antes de proceder al desarrollo de los endpoints.
+
+4. **Conflictos de Alembic:**
+   * Antes de generar una nueva migración con Alembic, asegúrate de estar parado sobre la versión más reciente de `main` actualizada para evitar ramas cruzadas, conflictos de IDs de revisión duplicados o desfases en la base de datos.
+
 ---
 
 ## ⚡ 3. Desarrollo de APIs y Enrutamiento (FastAPI)
@@ -67,9 +73,14 @@ Para evitar pérdidas de integridad en datos históricos e inconsistencias de cl
    * Todo endpoint debe usar modelos de Pydantic para la validación estricta de las peticiones (`Schemas`) y respuestas.
    * Retornar respuestas explícitas con tipado estricto en la firma de la función utilizando `response_model` o tipado en FastAPI.
 
+3. **Documentación del Contrato y Referencia de la API (OBLIGATORIO):**
+   * Al crear, modificar o eliminar cualquier endpoint o su estructura de respuesta, es **obligatorio** que actualices el archivo `API_REFERENCE.md` en la raíz de este repositorio, detallando el método, la ruta, los parámetros requeridos y ejemplos de la respuesta JSON.
+   * **Además, debes replicar y actualizar de forma exacta este contrato de datos en el archivo `./.context/architecture.md`** de este mismo repositorio, para que el usuario pueda copiarlo fácilmente al entorno del Frontend.
+
 ---
 
 ## 📑 4. Referencias y Parámetros del Proyecto
 
 * **URL de la API de Linear:** `https://api.linear.app/graphql`
+* **Autenticación Linear:** El token de acceso se encuentra en la variable de entorno `LINEAR_API_KEY` dentro del archivo `.env` local (Este archivo está en el `.gitignore` y no debe subirse).
 * **Tecnologías Core:** Python 3.10+, FastAPI, SQLAlchemy, Alembic, PostgreSQL.
