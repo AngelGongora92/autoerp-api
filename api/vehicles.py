@@ -22,7 +22,13 @@ async def get_all_vehicles(
     stmt = (
         select(Vehicle)
         .filter(Vehicle.company_id == current_user.company_id)
-        .options(joinedload(Vehicle.color), joinedload(Vehicle.motor), joinedload(Vehicle.vehicle_type))
+        .options(
+            joinedload(Vehicle.color),
+            joinedload(Vehicle.motor),
+            joinedload(Vehicle.vehicle_type),
+            joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Vehicle.transmission)
+        )
     )
     vehicles = db.scalars(stmt).unique().all()
     return vehicles
@@ -39,7 +45,13 @@ async def get_vehicles_by_id(
     stmt = (
         select(Vehicle)
         .filter(Vehicle.customer_id == customer_id, Vehicle.company_id == current_user.company_id)
-        .options(joinedload(Vehicle.color), joinedload(Vehicle.motor), joinedload(Vehicle.vehicle_type))
+        .options(
+            joinedload(Vehicle.color),
+            joinedload(Vehicle.motor),
+            joinedload(Vehicle.vehicle_type),
+            joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Vehicle.transmission)
+        )
     )
     vehicles = db.scalars(stmt).unique().all()
     return vehicles
@@ -80,8 +92,20 @@ async def create_vehicle(
     new_vehicle.company_id = current_user.company_id
     db.add(new_vehicle)
     db.commit()
-    db.refresh(new_vehicle)
-    return new_vehicle
+    
+    # Eagerly load the created vehicle with all relationships populated
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.vehicle_id == new_vehicle.vehicle_id)
+        .options(
+            joinedload(Vehicle.color),
+            joinedload(Vehicle.motor),
+            joinedload(Vehicle.vehicle_type),
+            joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Vehicle.transmission)
+        )
+    )
+    return db.scalar(stmt)
 
 @router.get("/v/{vehicle_id}", response_model=VehicleResponse)
 async def get_vehicle_by_id(
@@ -92,9 +116,18 @@ async def get_vehicle_by_id(
     """
     Obtiene un solo vehículo por su ID.
     """
-    vehicle = db.scalar(
-        select(Vehicle).where(Vehicle.vehicle_id == vehicle_id, Vehicle.company_id == current_user.company_id)
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.vehicle_id == vehicle_id, Vehicle.company_id == current_user.company_id)
+        .options(
+            joinedload(Vehicle.color),
+            joinedload(Vehicle.motor),
+            joinedload(Vehicle.vehicle_type),
+            joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Vehicle.transmission)
+        )
     )
+    vehicle = db.scalar(stmt)
 
     if not vehicle:
         raise HTTPException(
@@ -288,5 +321,17 @@ async def update_vehicle(
         setattr(vehicle, key, value)
 
     db.commit()
-    db.refresh(vehicle)
-    return vehicle
+    
+    # Eagerly load the updated vehicle with all relationships populated
+    stmt = (
+        select(Vehicle)
+        .where(Vehicle.vehicle_id == vehicle_id)
+        .options(
+            joinedload(Vehicle.color),
+            joinedload(Vehicle.motor),
+            joinedload(Vehicle.vehicle_type),
+            joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Vehicle.transmission)
+        )
+    )
+    return db.scalar(stmt)
