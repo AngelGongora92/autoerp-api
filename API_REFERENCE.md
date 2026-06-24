@@ -149,6 +149,17 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 
 ## 🚗 Vehículos (`/vehicles`)
 
+### `GET /vehicles/`
+*   **Descripción:** Obtiene todos los vehículos asociados al taller (tenant).
+*   **Tabla Fuente:** `vehicles`
+*   **Salida (List[JSON]):**
+    *   `vehicle_id` (Int)
+    *   `vin` (String)
+    *   `plate` (String)
+    *   `model` (Object): `{ model: String, make: { make: String } }`
+    *   `color` (Object): `{ color: String }`
+    *   `year` (Int)
+
 ### `GET /vehicles/{customer_id}`
 *   **Descripción:** Obtiene todos los vehículos de un cliente.
 *   **Tabla Fuente:** `vehicles`

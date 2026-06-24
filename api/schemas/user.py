@@ -231,10 +231,14 @@ class CreateOrder(BaseModel):
     mechanic_id: Optional[int] = None
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
     adm_status_id: Optional[int] = 1
     op_status_id: Optional[int] = 1
     priority_id: Optional[int] = 1
     fuel_level: Optional[int] = None
+    c_mileage: Optional[int] = None
+    p_mileage: Optional[int] = None
+    service_bay: Optional[str] = None
 
 class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

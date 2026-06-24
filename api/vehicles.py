@@ -11,6 +11,22 @@ from api.auth_deps import get_current_user
 
 router = APIRouter()
 
+@router.get("/", response_model=List[VehicleResponse])
+async def get_all_vehicles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Obtiene una lista de todos los vehículos asociados al taller (tenant).
+    """
+    stmt = (
+        select(Vehicle)
+        .filter(Vehicle.company_id == current_user.company_id)
+        .options(joinedload(Vehicle.color), joinedload(Vehicle.motor), joinedload(Vehicle.vehicle_type))
+    )
+    vehicles = db.scalars(stmt).unique().all()
+    return vehicles
+
 @router.get("/{customer_id}", response_model=List[VehicleResponse])
 async def get_vehicles_by_id(
     customer_id: int,  # FastAPI espera un entero del parámetro de ruta
