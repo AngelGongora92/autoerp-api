@@ -182,6 +182,14 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
     *   `motor_id` (Int)
     *   `customer_id` (Int)
 
+### `PATCH /vehicles/{vehicle_id}`
+*   **Descripción:** Actualiza parcialmente un vehículo.
+*   **Tabla Fuente:** `vehicles`
+*   **Entrada (Body JSON):**
+    *   Cualquier campo del vehículo opcional (ej: `mileage`, `vin`, `plate`, etc.).
+*   **Salida (JSON):**
+    *   Objeto `VehicleResponse` del vehículo actualizado.
+
 ### `GET /vehicles/makes/`
 *   **Descripción:** Catálogo de Marcas.
 *   **Tabla Fuente:** `makes`

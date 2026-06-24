@@ -206,6 +206,20 @@ class VehicleResponse(BaseModel):
     liters: str
     vehicle_type: VehicleTypeResponse
 
+class VehicleUpdate(BaseModel):
+    customer_id: Optional[int] = None
+    vin: Optional[str] = None
+    plate: Optional[str] = None
+    year: Optional[int] = None
+    model_id: Optional[int] = None
+    mileage: Optional[int] = None
+    color_id: Optional[int] = None
+    motor_id: Optional[int] = None
+    transmission_id: Optional[int] = None
+    cylinders: Optional[int] = None
+    liters: Optional[str] = None
+    v_type_id: Optional[int] = None
+
 class VehicleInfoForAppointment(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     year: int

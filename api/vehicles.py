@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from typing import List
 from .database import get_db, Vehicle, Color, Motor, VehicleType, Make, Model, Transmission, User
-from .schemas.user import VehicleResponse, VehicleCreate, ColorResponse, ColorCreate, MotorResponse, MotorCreate, VehicleTypeResponse, VehicleTypeCreate, VehicleMakesResponse, VehicleModelsResponse, VehicleTransmissionsResponse
+from .schemas.user import VehicleResponse, VehicleCreate, VehicleUpdate, ColorResponse, ColorCreate, MotorResponse, MotorCreate, VehicleTypeResponse, VehicleTypeCreate, VehicleMakesResponse, VehicleModelsResponse, VehicleTransmissionsResponse
 from fastapi import status
 from fastapi.exceptions import HTTPException
 from api.auth_deps import get_current_user
@@ -239,3 +239,54 @@ async def get_all_transmissions(
     stmt = select(Transmission)
     transmissions = db.scalars(stmt).unique().all()
     return transmissions
+
+@router.patch("/{vehicle_id}", response_model=VehicleResponse)
+async def update_vehicle(
+    vehicle_id: int,
+    vehicle_data: VehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Actualiza parcialmente un vehículo existente.
+    """
+    vehicle = db.scalar(
+        select(Vehicle).where(Vehicle.vehicle_id == vehicle_id, Vehicle.company_id == current_user.company_id)
+    )
+    if not vehicle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehículo no encontrado o acceso denegado."
+        )
+
+    # Validar unicidad de VIN si se actualiza
+    update_dict = vehicle_data.model_dump(exclude_unset=True)
+    if "vin" in update_dict and update_dict["vin"]:
+        existing = db.scalars(
+            select(Vehicle).where(
+                Vehicle.vin == update_dict["vin"],
+                Vehicle.company_id == current_user.company_id,
+                Vehicle.vehicle_id != vehicle_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Ya existe otro vehículo con este número VIN.")
+
+    # Validar unicidad de placas si se actualiza
+    if "plate" in update_dict and update_dict["plate"]:
+        existing = db.scalars(
+            select(Vehicle).where(
+                Vehicle.plate == update_dict["plate"],
+                Vehicle.company_id == current_user.company_id,
+                Vehicle.vehicle_id != vehicle_id
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Ya existe otro vehículo con estas placas.")
+
+    for key, value in update_dict.items():
+        setattr(vehicle, key, value)
+
+    db.commit()
+    db.refresh(vehicle)
+    return vehicle
