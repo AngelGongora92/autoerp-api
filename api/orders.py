@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData, User
-from sqlalchemy.orm import joinedload, Session
-from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse, BodyworkDetailTypesResponse, BodyworkDetailTypesCreate, BodyworkDetailsResponse, BodyworkDetailsCreate, BodyworkDetailTypesUpdate, BodyworkDetailsUpdate, InventoryTypesResponse, InventoryTypesCreate, InventoryItemsCreate, InventoryItemsResponse, InventoryItemsByTypeResponse, InventoryItemReorder, OrderInventoryDataCreate, OrderInventoryDataResponse, InventoryTypesReorder, InventoryTypesUpdate, InventoryItemsUpdate
+import math
+from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData, User, Vehicle, Model, Customer
+from sqlalchemy.orm import joinedload
+from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse, BodyworkDetailTypesResponse, BodyworkDetailTypesCreate, BodyworkDetailsResponse, BodyworkDetailsCreate, BodyworkDetailTypesUpdate, BodyworkDetailsUpdate, InventoryTypesResponse, InventoryTypesCreate, InventoryItemsCreate, InventoryItemsResponse, InventoryItemsByTypeResponse, InventoryItemReorder, OrderInventoryDataCreate, OrderInventoryDataResponse, InventoryTypesReorder, InventoryTypesUpdate, InventoryItemsUpdate, OrdersPaginatedResponse
 from .database import InventoryTypes, InventoryItems, OrderInventoryData
 from api.auth_deps import get_current_user
 
@@ -65,17 +66,78 @@ async def update_order(
     return order
 
 
-@router.get("/", response_model=List[OrderResponse])
+@router.get("/", response_model=OrdersPaginatedResponse)
 async def get_all_orders(
+    page: int = 1,
+    limit: int = 20,
+    status_filter: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Obtiene una lista de todas las órdenes.
+    Obtiene una lista paginada de todas las órdenes con sus relaciones anidadas, permitiendo búsqueda y filtrado.
     """
-    stmt = select(Order).where(Order.company_id == current_user.company_id)
+    count_stmt = select(func.count()).select_from(Order).where(Order.company_id == current_user.company_id)
+    stmt = (
+        select(Order)
+        .where(Order.company_id == current_user.company_id)
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.vehicle).joinedload(Vehicle.model).joinedload(Model.make),
+            joinedload(Order.mechanic),
+            joinedload(Order.advisor)
+        )
+    )
+
+    if status_filter and status_filter != "all":
+        try:
+            op_status_id = int(status_filter)
+            count_stmt = count_stmt.where(Order.op_status_id == op_status_id)
+            stmt = stmt.where(Order.op_status_id == op_status_id)
+        except ValueError:
+            pass
+
+    if search:
+        search_term = f"%{search}%"
+        count_stmt = count_stmt.join(Order.customer, isouter=True).join(Order.vehicle, isouter=True)
+        stmt = stmt.join(Order.customer, isouter=True).join(Order.vehicle, isouter=True)
+        
+        filter_cond = (
+            Order.c_order_id.ilike(search_term) |
+            Customer.fname.ilike(search_term) |
+            Customer.lname.ilike(search_term) |
+            Customer.cname.ilike(search_term) |
+            Vehicle.plate.ilike(search_term)
+        )
+        count_stmt = count_stmt.where(filter_cond)
+        stmt = stmt.where(filter_cond)
+
+    pending_count = db.scalar(
+        select(func.count()).select_from(Order).where(Order.company_id == current_user.company_id, Order.op_status_id == 1)
+    ) or 0
+    in_progress_count = db.scalar(
+        select(func.count()).select_from(Order).where(Order.company_id == current_user.company_id, Order.op_status_id == 2)
+    ) or 0
+    completed_count = db.scalar(
+        select(func.count()).select_from(Order).where(Order.company_id == current_user.company_id, Order.op_status_id == 3)
+    ) or 0
+
+    total = db.scalar(count_stmt) or 0
+    stmt = stmt.order_by(Order.order_date.desc()).offset((page - 1) * limit).limit(limit)
     orders = db.scalars(stmt).unique().all()
-    return orders
+    pages = math.ceil(total / limit) if limit > 0 else 1
+
+    return {
+        "orders": orders,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+        "pending_count": pending_count,
+        "in_progress_count": in_progress_count,
+        "completed_count": completed_count
+    }
 
 
 @router.get("/{order_id}", response_model=OrderResponse)

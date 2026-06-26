@@ -272,6 +272,68 @@ class OrderResponse(BaseModel):
     fuel_level: Optional[int] = None
     service_bay: Optional[str] = None
 
+class CustomerResponseShort(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    customer_id: int
+    is_company: bool
+    cname: Optional[str] = None
+    fname: Optional[str] = None
+    lname: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+
+class VehicleModelShort(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    model: str
+    make: VehicleMakesResponse
+
+class VehicleResponseShort(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    vehicle_id: int
+    plate: Optional[str] = None
+    year: int
+    vin: Optional[str] = None
+    model: VehicleModelShort
+
+class EmployeeResponseShort(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    employee_id: int
+    fname: str
+    lname1: str
+    email: str
+
+class OrderResponseNested(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    order_id: int
+    c_order_id: str
+    order_date: datetime
+    advisor_id: Optional[int] = None
+    mechanic_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    c_mileage: Optional[int] = None
+    op_status_id: Optional[int] = None
+    adm_status_id: Optional[int] = None
+    priority_id: Optional[int] = None
+    has_extra_info: Optional[bool] = None
+    fuel_level: Optional[int] = None
+    service_bay: Optional[str] = None
+    customer: Optional[CustomerResponseShort] = None
+    vehicle: Optional[VehicleResponseShort] = None
+    mechanic: Optional[EmployeeResponseShort] = None
+    advisor: Optional[EmployeeResponseShort] = None
+
+class OrdersPaginatedResponse(BaseModel):
+    orders: List[OrderResponseNested]
+    total: int
+    page: int
+    limit: int
+    pages: int
+    pending_count: int
+    in_progress_count: int
+    completed_count: int
+
 class OrderUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
     c_order_id: Optional[str] = None

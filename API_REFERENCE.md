@@ -105,16 +105,20 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 ## 🛠 Órdenes de Servicio (`/orders`)
 
 ### `GET /orders/`
-*   **Descripción:** Listado general de órdenes.
-*   **Tabla Fuente:** `orders`
-*   **Salida (List[JSON]):**
-    *   `order_id` (Int): ID interno.
-    *   `c_order_id` (String): ID personalizado visible al usuario.
-    *   `order_date` (Datetime)
-    *   `op_status_id` (Int): Estado operativo.
-    *   `adm_status_id` (Int): Estado administrativo.
-    *   `vehicle_id` (Int)
-    *   `customer_id` (Int)
+*   **Descripción:** Listado paginado de órdenes del taller con relaciones anidadas.
+*   **Parámetros de Consulta (Query Params):**
+    *   `page` (Int, Opcional, por defecto 1)
+    *   `limit` (Int, Opcional, por defecto 20)
+*   **Salida (JSON):**
+    *   `orders` (List[JSON]): Lista de órdenes de servicio con detalles anidados de:
+        *   `customer` (JSON, Opcional): Información resumida del cliente.
+        *   `vehicle` (JSON, Opcional): Información del vehículo (incluyendo marca y modelo).
+        *   `mechanic` (JSON, Opcional): Información del mecánico asignado.
+        *   `advisor` (JSON, Opcional): Información del asesor.
+    *   `total` (Int): Total de órdenes del taller.
+    *   `page` (Int): Página actual consultada.
+    *   `limit` (Int): Cantidad máxima de registros por página.
+    *   `pages` (Int): Total de páginas disponibles.
 
 ### `POST /orders/`
 *   **Descripción:** Crear nueva orden.
