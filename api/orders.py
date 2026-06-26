@@ -388,7 +388,7 @@ async def check_order_exists(
     )
     return order is not None
 
-@router.get("/last-order-id/", response_model=Optional[int])
+@router.get("/last-order-id/", response_model=Optional[str])
 async def get_last_order_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
