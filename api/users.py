@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import jwt
 
 from .schemas.user import UserCreate, UserResponse, UserUpdate, PermissionBase
-from .database import User, Permission, Company, get_db
+from .database import User, Permission, Company, get_db, InventoryTypes, InventoryItems
 from . import hashing
 from api.auth_deps import get_current_user, SUPABASE_JWT_SECRET
 
@@ -89,6 +89,45 @@ async def register_new_company_and_user(
     new_user.permissions = list(all_permissions)
     
     db.add(new_user)
+    
+    # Sembrar (Clonar) plantillas de inventario predeterminadas del sistema
+    templates = db.scalars(
+        select(InventoryTypes).where(
+            InventoryTypes.company_id == None,
+            InventoryTypes.is_active == True
+        )
+    ).all()
+    
+    for template in templates:
+        cloned_type = InventoryTypes(
+            name=template.name,
+            component_key=template.component_key,
+            is_active=template.is_active,
+            position=template.position,
+            picture_path=template.picture_path,
+            company_id=new_company.company_id
+        )
+        db.add(cloned_type)
+        db.flush() # Genera cloned_type.inv_type_id
+        
+        # Obtener y clonar los items correspondientes
+        template_items = db.scalars(
+            select(InventoryItems).where(InventoryItems.inv_type_id == template.inv_type_id)
+        ).all()
+        
+        for item in template_items:
+            cloned_item = InventoryItems(
+                inv_type_id=cloned_type.inv_type_id,
+                label=item.label,
+                input_type=item.input_type,
+                position=item.position,
+                description=item.description,
+                picture_upload=item.picture_upload,
+                is_mandatory=item.is_mandatory,
+                company_id=new_company.company_id
+            )
+            db.add(cloned_item)
+            
     db.commit()
     db.refresh(new_user)
     return new_user

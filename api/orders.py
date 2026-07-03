@@ -406,19 +406,22 @@ async def get_last_order_id(
 async def create_inventory_type(
     inventory_type: InventoryTypesCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Crea un nuevo tipo de inventario. La posición se asigna automáticamente.
+    Crea un nuevo tipo de inventario para la empresa actual. La posición se asigna automáticamente.
     """
     # Calcular la siguiente posición
-    max_position_stmt = select(func.max(InventoryTypes.position))
+    max_position_stmt = select(func.max(InventoryTypes.position)).where(
+        InventoryTypes.company_id == current_user.company_id
+    )
     max_position = db.scalar(max_position_stmt)
-    
     next_position = (max_position + 1) if max_position is not None else 0
 
-    # Crear el nuevo tipo de inventario con la posición calculada
     new_inventory_type = InventoryTypes(
-        **inventory_type.model_dump(), position=next_position
+        **inventory_type.model_dump(),
+        position=next_position,
+        company_id=current_user.company_id
     )
     db.add(new_inventory_type)
     db.commit()
@@ -428,11 +431,14 @@ async def create_inventory_type(
 @router.get("/inventory-types/", response_model=List[InventoryTypesResponse])
 async def get_all_inventory_types(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Obtiene todos los tipos de inventario.
+    Obtiene todos los tipos de inventario de la empresa actual.
     """
-    stmt = select(InventoryTypes).order_by(InventoryTypes.position)
+    stmt = select(InventoryTypes).where(
+        InventoryTypes.company_id == current_user.company_id
+    ).order_by(InventoryTypes.position)
     inventory_types = db.scalars(stmt).all()
     return inventory_types
 
@@ -441,11 +447,17 @@ async def update_inventory_type(
     inv_type_id: int,
     inventory_type_data: InventoryTypesUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Actualiza parcialmente un tipo de inventario existente.
     """
-    inventory_type = db.get(InventoryTypes, inv_type_id)
+    inventory_type = db.scalar(
+        select(InventoryTypes).where(
+            InventoryTypes.inv_type_id == inv_type_id,
+            InventoryTypes.company_id == current_user.company_id
+        )
+    )
     if not inventory_type:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory type not found")
 
@@ -457,34 +469,57 @@ async def update_inventory_type(
     db.refresh(inventory_type)
     return inventory_type
 
+@router.delete("/inventory-types/{inv_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_inventory_type(
+    inv_type_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Elimina un tipo de inventario y sus ítems asociados si pertenecen a la empresa actual.
+    """
+    inventory_type = db.scalar(
+        select(InventoryTypes).where(
+            InventoryTypes.inv_type_id == inv_type_id,
+            InventoryTypes.company_id == current_user.company_id
+        )
+    )
+    if not inventory_type:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory type not found")
+
+    db.delete(inventory_type)
+    db.commit()
+    return
+
 @router.put("/inventory-types/reorder", status_code=status.HTTP_200_OK)
 async def reorder_inventory_types(
     reorder_data: List[InventoryTypesReorder],
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Reordena una lista de tipos de inventario.
-    Recibe una lista completa de tipos con su nueva posición.
-    Esta operación es atómica: o todos los tipos se reordenan, o ninguno lo hace.
+    Reordena una lista de tipos de inventario de la empresa actual.
     """
     if not reorder_data:
         return {"message": "No inventory types to reorder."}
 
-    # Crear un mapa de inv_type_id a su nueva posición para una búsqueda rápida.
     position_map = {item.inv_type_id: item.position for item in reorder_data}
     inv_type_ids = list(position_map.keys())
 
     try:
-        # Obtener todos los tipos de inventario de la base de datos en una sola consulta.
-        types_to_update = db.scalars(select(InventoryTypes).where(InventoryTypes.inv_type_id.in_(inv_type_ids))).all()
+        types_to_update = db.scalars(
+            select(InventoryTypes).where(
+                InventoryTypes.inv_type_id.in_(inv_type_ids),
+                InventoryTypes.company_id == current_user.company_id
+            )
+        ).all()
 
-        # Actualizar la posición de cada tipo en la sesión.
         for inv_type in types_to_update:
             inv_type.position = position_map[inv_type.inv_type_id]
         
-        db.commit() # Guardar todos los cambios en una sola transacción.
+        db.commit()
     except Exception as e:
-        db.rollback() # Si algo falla, revertir todos los cambios.
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to reorder inventory types: {e}")
 
     return {"message": "Inventory types reordered successfully."}
@@ -493,24 +528,32 @@ async def reorder_inventory_types(
 async def create_inventory_item(
     inventory_item: InventoryItemsCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Crea un nuevo ítem de inventario. La posición se asigna automáticamente al final de la lista.
+    Crea un nuevo ítem de inventario para la empresa actual.
     """
-    # 1. Calcular la siguiente posición para el tipo de inventario dado.
-    # Se busca la posición máxima actual y se le suma 1.
+    # Validar que el tipo de inventario pertenece a la empresa actual
+    inv_type = db.scalar(
+        select(InventoryTypes).where(
+            InventoryTypes.inv_type_id == inventory_item.inv_type_id,
+            InventoryTypes.company_id == current_user.company_id
+        )
+    )
+    if not inv_type:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory type not found")
+
     max_position_stmt = select(func.max(InventoryItems.position)).where(
-        InventoryItems.inv_type_id == inventory_item.inv_type_id
+        InventoryItems.inv_type_id == inventory_item.inv_type_id,
+        InventoryItems.company_id == current_user.company_id
     )
     max_position = db.scalar(max_position_stmt)
-    
-    # Si no hay ítems, la nueva posición es 0. De lo contrario, es max + 1.
     next_position = (max_position + 1) if max_position is not None else 0
 
-    # 2. Crear el nuevo ítem con la posición calculada.
     new_inventory_item = InventoryItems(
-        **inventory_item.model_dump(exclude_defaults=True), 
-        position=next_position
+        **inventory_item.model_dump(exclude_defaults=True),
+        position=next_position,
+        company_id=current_user.company_id
     )
     db.add(new_inventory_item)
     db.commit()
@@ -521,51 +564,79 @@ async def create_inventory_item(
 async def get_inventory_items_by_type(
     inv_type_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Obtiene un tipo de inventario y todos sus ítems asociados.
+    Obtiene un tipo de inventario y todos sus ítems asociados de la empresa actual.
     """
-    # 1. Obtener el tipo de inventario.
-    inventory_type = db.get(InventoryTypes, inv_type_id)
+    inventory_type = db.scalar(
+        select(InventoryTypes).where(
+            InventoryTypes.inv_type_id == inv_type_id,
+            InventoryTypes.company_id == current_user.company_id
+        )
+    )
     if not inventory_type:
-        raise HTTPException(status_code=404, detail="Inventory type not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory type not found")
 
-    # 2. Obtener todos los ítems asociados a ese tipo.
-    # No necesitamos cargar la relación aquí porque ya tenemos el objeto inventory_type.
-    stmt = select(InventoryItems).where(InventoryItems.inv_type_id == inv_type_id)
+    stmt = select(InventoryItems).where(
+        InventoryItems.inv_type_id == inv_type_id,
+        InventoryItems.company_id == current_user.company_id
+    ).order_by(InventoryItems.position)
     items = db.scalars(stmt).all()
 
-    # 3. Construir y devolver la respuesta estructurada.
     return {"inventory_type": inventory_type, "items": items}
+
+@router.delete("/inventory-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_inventory_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Elimina un ítem de inventario si pertenece a la empresa actual.
+    """
+    item = db.scalar(
+        select(InventoryItems).where(
+            InventoryItems.item_id == item_id,
+            InventoryItems.company_id == current_user.company_id
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
+
+    db.delete(item)
+    db.commit()
+    return
 
 @router.put("/inventory-items/reorder", status_code=status.HTTP_200_OK)
 async def reorder_inventory_items(
     reorder_data: List[InventoryItemReorder],
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Reordena una lista de ítems de inventario.
-    Recibe una lista completa de ítems con su nueva posición.
-    Esta operación es atómica: o todos los ítems se reordenan, o ninguno lo hace.
+    Reordena una lista de ítems de inventario de la empresa actual.
     """
     if not reorder_data:
         return {"message": "No items to reorder."}
 
-    # Crear un mapa de item_id a su nueva posición para una búsqueda rápida.
     position_map = {item.item_id: item.position for item in reorder_data}
     item_ids = list(position_map.keys())
 
     try:
-        # Obtener todos los ítems de la base de datos en una sola consulta.
-        items_to_update = db.scalars(select(InventoryItems).where(InventoryItems.item_id.in_(item_ids))).all()
+        items_to_update = db.scalars(
+            select(InventoryItems).where(
+                InventoryItems.item_id.in_(item_ids),
+                InventoryItems.company_id == current_user.company_id
+            )
+        ).all()
 
-        # Actualizar la posición de cada ítem en la sesión.
         for item in items_to_update:
             item.position = position_map[item.item_id]
         
-        db.commit() # Guardar todos los cambios en una sola transacción.
+        db.commit()
     except Exception as e:
-        db.rollback() # Si algo falla, revertir todos los cambios.
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to reorder items: {e}")
 
     return {"message": "Items reordered successfully."}
@@ -574,46 +645,47 @@ async def reorder_inventory_items(
 async def update_inventory_items(
     items_to_update_data: List[InventoryItemsUpdate],
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Actualiza parcialmente múltiples ítems de inventario en una sola operación.
-    Si algún `item_id` proporcionado no se encuentra, la operación fallará.
+    Actualiza parcialmente múltiples ítems de inventario en una sola operación para la empresa actual.
     """
     if not items_to_update_data:
         return []
 
-    # 1. Extraer todos los IDs y crear un mapa con los datos de entrada.
     item_ids = [item.item_id for item in items_to_update_data]
     update_data_map = {item.item_id: item.model_dump(exclude_unset=True) for item in items_to_update_data}
 
     try:
-        # 2. Obtener todos los ítems de la BD en una sola consulta.
-        items_in_db = db.scalars(select(InventoryItems).where(InventoryItems.item_id.in_(item_ids))).all()
+        items_in_db = db.scalars(
+            select(InventoryItems).where(
+                InventoryItems.item_id.in_(item_ids),
+                InventoryItems.company_id == current_user.company_id
+            )
+        ).all()
 
-        # 3. Verificar que se encontraron todos los ítems solicitados.
         if len(items_in_db) != len(item_ids):
             found_ids = {item.item_id for item in items_in_db}
             missing_ids = set(item_ids) - found_ids
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No se encontraron los siguientes ítems: {list(missing_ids)}"
+                detail=f"No se encontraron los siguientes ítems o acceso denegado: {list(missing_ids)}"
             )
 
-        # 4. Actualizar los campos de cada ítem en la sesión de SQLAlchemy.
         for item in items_in_db:
             item_data = update_data_map[item.item_id]
             for key, value in item_data.items():
-                if key != "item_id":  # No se debe actualizar la clave primaria
+                if key != "item_id":
                     setattr(item, key, value)
         
-        # 5. Guardar todos los cambios en una transacción atómica.
         db.commit()
         
-        # 6. Refrescar los objetos para obtener el estado final de la BD.
         for item in items_in_db:
             db.refresh(item)
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback() # Si algo falla, revertir todos los cambios.
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al actualizar los ítems: {e}")
 
     return items_in_db
@@ -623,44 +695,54 @@ async def update_inventory_items(
 async def upsert_order_inventory_data(
     data_entries: List[OrderInventoryDataCreate],
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Crea o actualiza (Upsert) múltiples entradas de datos de inventario para una orden.
-    Acepta una lista de objetos. Para cada objeto:
-    - Si ya existe una entrada para un `order_id` y `item_id`, la actualiza.
-    - Si no existe, la crea.
+    Crea o actualiza (Upsert) múltiples entradas de datos de inventario para una orden de la empresa actual.
     """
     if not data_entries:
         return []
 
-    processed_entries = []
-    # Extraemos los IDs para una consulta más eficiente
     order_id = data_entries[0].order_id
+    
+    # Validar que la orden pertenece a la empresa actual
+    order = db.scalar(
+        select(Order).where(Order.order_id == order_id, Order.company_id == current_user.company_id)
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada o acceso denegado.")
+
+    processed_entries = []
     item_ids = [entry.item_id for entry in data_entries]
 
-    # 1. Obtenemos todas las entradas existentes para esta orden en una sola consulta.
     existing_entries_stmt = select(OrderInventoryData).where(
         OrderInventoryData.order_id == order_id,
         OrderInventoryData.item_id.in_(item_ids)
     )
-    # Creamos un mapa para acceso rápido: {item_id: objeto_db}
     existing_entries_map = {entry.item_id: entry for entry in db.scalars(existing_entries_stmt).all()}
 
     for entry_data in data_entries:
+        # Validar que el item de inventario pertenece a la misma empresa
+        item = db.scalar(
+            select(InventoryItems).where(
+                InventoryItems.item_id == entry_data.item_id,
+                InventoryItems.company_id == current_user.company_id
+            )
+        )
+        if not item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ítem de inventario {entry_data.item_id} no encontrado o acceso denegado.")
+
         existing_entry = existing_entries_map.get(entry_data.item_id)
         if existing_entry:
-            # 2. Si existe, actualiza el campo 'data'
             existing_entry.data = entry_data.data
             processed_entries.append(existing_entry)
         else:
-            # 3. Si no existe, crea una nueva entrada
             new_entry = OrderInventoryData(**entry_data.model_dump())
             db.add(new_entry)
             processed_entries.append(new_entry)
 
     db.commit()
     
-    # Refrescamos los objetos para asegurar que tienen los datos de la DB
     for entry in processed_entries:
         db.refresh(entry)
 
@@ -671,17 +753,27 @@ async def get_order_inventory_data(
     order_id: int,
     inv_type_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Obtiene todas las entradas de datos de inventario para una orden y tipo de inventario específicos.
+    Obtiene todas las entradas de datos de inventario para una orden y tipo de inventario específicos de la empresa actual.
     """
-    # 1. Obtener los item_ids que pertenecen al inv_type_id
-    item_ids_stmt = select(InventoryItems.item_id).where(InventoryItems.inv_type_id == inv_type_id)
+    # Validar que la orden pertenece a la empresa actual
+    order = db.scalar(
+        select(Order).where(Order.order_id == order_id, Order.company_id == current_user.company_id)
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada o acceso denegado.")
+
+    # Obtener los item_ids que pertenecen al inv_type_id y a la empresa actual
+    item_ids_stmt = select(InventoryItems.item_id).where(
+        InventoryItems.inv_type_id == inv_type_id,
+        InventoryItems.company_id == current_user.company_id
+    )
     item_ids = db.scalars(item_ids_stmt).all()
     if not item_ids:
-        return [] # Si no hay items para ese tipo, no hay datos que devolver.
+        return []
 
-    # 2. Obtener los datos de la orden que coincidan con esos item_ids
     stmt = select(OrderInventoryData).where(
         OrderInventoryData.order_id == order_id,
         OrderInventoryData.item_id.in_(item_ids)

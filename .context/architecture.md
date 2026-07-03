@@ -299,6 +299,7 @@ appointments
 | is_active     | BOOLEAN      | NOT NULL, default TRUE|
 | position      | INTEGER      | NOT NULL, default 0  |
 | picture_path  | VARCHAR(512) | nullable             |
+| company_id    | INTEGER      | FK → companies, SET NULL, nullable |
 
 ### `inventory_items`
 | Columna        | Tipo         | Restricciones                    |
@@ -311,6 +312,7 @@ appointments
 | description    | TEXT         | nullable                         |
 | picture_upload | BOOLEAN      | NOT NULL, default FALSE          |
 | is_mandatory   | BOOLEAN      | NOT NULL, default FALSE          |
+| company_id     | INTEGER      | FK → companies, SET NULL, nullable |
 
 ### `order_inventory_data`
 | Columna  | Tipo    | Restricciones                                      |

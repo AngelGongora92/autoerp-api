@@ -432,6 +432,7 @@ class InventoryTypesResponse(BaseModel):
     is_active: bool
     position: int
     picture_path: Optional[str] = None
+    company_id: Optional[int] = None
 
 class InventoryTypesUpdate(BaseModel):
     name: Optional[str] = None
@@ -472,6 +473,7 @@ class InventoryItemsResponse(BaseModel):
     description: Optional[str] = None
     is_mandatory: bool
     picture_upload: bool
+    company_id: Optional[int] = None
     inventory_type: InventoryTypesResponse
 
 class InventoryItemStrippedResponse(BaseModel):

@@ -306,7 +306,9 @@ class InventoryTypes(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     position = Column(Integer, nullable=False, default=0)
     picture_path = Column(String(512), nullable=True)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
 
+    company = relationship('Company')
     # Relación uno a muchos con InventoryItems
     items = relationship("InventoryItems", back_populates="inventory_type", cascade="all, delete-orphan")
 
@@ -321,7 +323,9 @@ class InventoryItems(Base):
     description = Column(String, nullable=True)  # Se mapea a TEXT en PostgreSQL
     picture_upload = Column(Boolean, nullable=False, default=False)
     is_mandatory = Column(Boolean, nullable=False, default=False)
+    company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
 
+    company = relationship('Company')
     inventory_type = relationship("InventoryTypes", back_populates="items")
 
 

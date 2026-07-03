@@ -149,6 +149,62 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 *   **Tabla Fuente:** `order_inventory_data`
 *   **Salida:** Lista de valores ingresados para los items de ese inventario.
 
+### `POST /orders/inventory-data/`
+*   **Descripción:** Registra o actualiza (Upsert) múltiples entradas de datos de inventario para una orden.
+*   **Tabla Fuente:** `order_inventory_data`
+*   **Entrada (Body JSON):** Lista de objetos `{ order_id: Int, item_id: Int, data: JSON }`.
+
+### `GET /orders/inventory-types/`
+*   **Descripción:** Obtiene todos los tipos de inventario configurados para la empresa actual, ordenados por su posición.
+*   **Tabla Fuente:** `inventory_types`
+*   **Salida (List[JSON]):**
+    *   `inv_type_id` (Int)
+    *   `name` (String)
+    *   `component_key` (String): "bodywork" o "generic_checklist".
+    *   `is_active` (Bool)
+    *   `position` (Int)
+    *   `company_id` (Int)
+
+### `POST /orders/inventory-types/`
+*   **Descripción:** Crea un nuevo tipo de inventario personalizado para la empresa actual.
+*   **Tabla Fuente:** `inventory_types`
+*   **Entrada (Body JSON):** `{ name: String, component_key: Optional[String], is_active: Optional[Bool] }`
+
+### `PATCH /orders/inventory-types/{inv_type_id}`
+*   **Descripción:** Actualiza parcialmente un tipo de inventario de la empresa actual.
+*   **Tabla Fuente:** `inventory_types`
+
+### `DELETE /orders/inventory-types/{inv_type_id}`
+*   **Descripción:** Elimina físicamente un tipo de inventario y sus ítems si pertenece a la empresa actual.
+*   **Tabla Fuente:** `inventory_types` (cascades to `inventory_items`)
+
+### `PUT /orders/inventory-types/reorder`
+*   **Descripción:** Actualiza atómicamente el orden (posiciones) de los tipos de inventario.
+*   **Entrada (Body JSON):** Lista de objetos `{ inv_type_id: Int, position: Int }`.
+
+### `GET /orders/inventory-items/{inv_type_id}`
+*   **Descripción:** Obtiene un tipo de inventario y todos sus ítems asociados de la empresa actual.
+*   **Tabla Fuente:** `inventory_items`
+*   **Salida (JSON):** `{ inventory_type: InventoryTypesResponse, items: List[InventoryItemStrippedResponse] }`
+
+### `POST /orders/inventory-items/`
+*   **Descripción:** Crea un nuevo ítem de inventario asociado a un tipo para la empresa actual.
+*   **Tabla Fuente:** `inventory_items`
+*   **Entrada (Body JSON):** `{ inv_type_id: Int, label: String, input_type: String, description: Optional[String], is_mandatory: Optional[Bool], picture_upload: Optional[Bool] }`
+
+### `PATCH /orders/inventory-items/`
+*   **Descripción:** Actualiza múltiples ítems de inventario de forma masiva (bulk).
+*   **Tabla Fuente:** `inventory_items`
+*   **Entrada (Body JSON):** Lista de objetos `{ item_id: Int, ...fields }`.
+
+### `DELETE /orders/inventory-items/{item_id}`
+*   **Descripción:** Elimina un ítem de inventario si pertenece a la empresa actual.
+*   **Tabla Fuente:** `inventory_items`
+
+### `PUT /orders/inventory-items/reorder`
+*   **Descripción:** Actualiza la posición de múltiples ítems de un tipo de inventario de forma atómica.
+*   **Entrada (Body JSON):** Lista de objetos `{ item_id: Int, position: Int }`.
+
 ---
 
 ## 🚗 Vehículos (`/vehicles`)
