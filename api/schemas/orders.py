@@ -131,6 +131,7 @@ class InventoryTypesResponse(BaseModel):
     is_active: bool
     position: int
     picture_path: Optional[str] = None
+    company_id: Optional[int] = None
 
 class InventoryTypesUpdate(BaseModel):
     name: Optional[str] = None
