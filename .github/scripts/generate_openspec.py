@@ -16,6 +16,7 @@ gemini_api_key = os.environ.get("GEMINI_API_KEY")
 github_repository = os.environ.get("GITHUB_REPOSITORY", "")
 input_ticket_id = os.environ.get("INPUT_TICKET_ID", "").strip()
 input_comment_body = os.environ.get("INPUT_COMMENT_BODY", "").strip()
+input_comment_id = os.environ.get("INPUT_COMMENT_ID", "").strip()
 
 event_payload_str = os.environ.get("EVENT_PAYLOAD", "{}")
 try:
@@ -27,17 +28,26 @@ ticket_id = input_ticket_id
 comment_body = input_comment_body
 
 if not ticket_id:
-    # Try parsing repository_dispatch client_payload
+    # Try parsing repository_dispatch client_payload or inputs
     client_payload = event_payload.get("client_payload", {})
-    ticket_id = client_payload.get("ticket_id") or client_payload.get("data", {}).get("issue", {}).get("identifier") or client_payload.get("data", {}).get("issueId") or ""
-    comment_body = client_payload.get("comment_body") or client_payload.get("data", {}).get("body") or ""
-
-if not ticket_id:
-    log("ERROR: No Ticket ID provided in input or payload.")
-    sys.exit(1)
-
-log(f"Processing Ticket ID: {ticket_id}")
-log(f"Trigger Comment: {comment_body}")
+    inputs_payload = event_payload.get("inputs", {})
+    ticket_id = (
+        client_payload.get("ticket_id")
+        or client_payload.get("issue_id")
+        or inputs_payload.get("issue_id")
+        or inputs_payload.get("ticket_id")
+        or client_payload.get("data", {}).get("issue", {}).get("identifier")
+        or client_payload.get("data", {}).get("issueId")
+        or ""
+    )
+    comment_body = (
+        comment_body
+        or client_payload.get("comment_body")
+        or client_payload.get("comment")
+        or inputs_payload.get("comment")
+        or client_payload.get("data", {}).get("body")
+        or ""
+    )
 
 if not linear_api_key:
     log("ERROR: LINEAR_API_KEY secret is missing.")
@@ -63,6 +73,32 @@ def query_linear(query, variables=None):
     req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers)
     with urllib.request.urlopen(req, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+# Fallback: If ticket_id is missing but comment_id is present, resolve issue from comment
+if not ticket_id and input_comment_id:
+    log(f"Resolving ticket ID from comment_id: {input_comment_id}...")
+    get_comment_issue_query = """
+    query GetCommentIssue($commentId: String!) {
+      comment(id: $commentId) {
+        issue {
+          id
+          identifier
+        }
+      }
+    }
+    """
+    res_comment_issue = query_linear(get_comment_issue_query, {"commentId": input_comment_id})
+    resolved_issue = res_comment_issue.get("data", {}).get("comment", {}).get("issue")
+    if resolved_issue:
+        ticket_id = resolved_issue.get("identifier") or resolved_issue.get("id")
+        log(f"Resolved ticket ID: {ticket_id}")
+
+if not ticket_id:
+    log("ERROR: No Ticket ID provided in input or payload, and could not resolve from comment_id.")
+    sys.exit(1)
+
+log(f"Processing Ticket ID: {ticket_id}")
+log(f"Trigger Comment: {comment_body}")
 
 # Fetch Ticket Details
 get_issue_query = """
@@ -111,7 +147,6 @@ log(f"Target Branch Name: {branch_name}")
 # Run git operations to switch branch
 try:
     subprocess.run(["git", "fetch", "origin"], check=True)
-    # Check if dev exists on origin
     res_dev = subprocess.run(["git", "rev-parse", "--verify", "origin/dev"], capture_output=True)
     base_branch = "dev" if res_dev.returncode == 0 else "main"
     log(f"Base branch selected: {base_branch}")
@@ -178,7 +213,6 @@ try:
     openspec_json = json.loads(gemini_output_raw)
 except Exception as e:
     log(f"JSON parsing fallback: {e}")
-    # Clean possible markdown block delimiters
     clean_raw = re.sub(r"^```json\s*", "", gemini_output_raw.strip(), flags=re.MULTILINE)
     clean_raw = re.sub(r"```$", "", clean_raw.strip(), flags=re.MULTILINE)
     openspec_json = json.loads(clean_raw)
