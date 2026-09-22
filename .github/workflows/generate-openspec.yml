@@ -1,0 +1,58 @@
+name: OpenSpec Orchestrator
+
+on:
+  repository_dispatch:
+    types: [linear_comment]
+  workflow_dispatch:
+    inputs:
+      ticket_id:
+        description: 'ID del ticket en Linear (ej. AUT-31)'
+        required: true
+        type: string
+      comment_body:
+        description: 'Texto del comentario disparador'
+        required: false
+        type: string
+        default: '#openspec'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  orchestrate-openspec:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate OpenSpec Specification
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EVENT_PAYLOAD: ${{ json(github.event) }}
+          INPUT_TICKET_ID: ${{ inputs.ticket_id }}
+          INPUT_COMMENT_BODY: ${{ inputs.comment_body }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/generate_openspec.py
+
+      - name: Commit and Push Specification to Feature Branch
+        run: |
+          git config --global user.name "OpenSpec Bot [GitHub Action]"
+          git config --global user.email "openspec-bot@users.noreply.github.com"
+          git add openspec/
+          if git diff --cached --quiet; then
+            echo "No OpenSpec changes detected to commit."
+          else
+            git commit -m "docs(openspec): generate technical specification via OpenSpec Orchestrator"
+            git push origin HEAD --force-with-lease
+          fi
