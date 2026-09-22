@@ -6,14 +6,22 @@ on:
   workflow_dispatch:
     inputs:
       issue_id:
-        description: 'ID del ticket en Linear (ej. AUT-31 o UUID)'
-        required: true
+        description: 'ID o UUID del ticket en Linear (ej. AUT-31)'
+        required: false
+        type: string
+      ticket_id:
+        description: 'ID secundario del ticket en Linear'
+        required: false
         type: string
       comment:
         description: 'Texto del comentario disparador'
         required: false
         type: string
         default: '#openspec'
+      comment_body:
+        description: 'Texto secundario del comentario disparador'
+        required: false
+        type: string
       comment_id:
         description: 'ID del comentario en Linear'
         required: false
@@ -43,8 +51,8 @@ jobs:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EVENT_PAYLOAD: ${{ json(github.event) }}
-          INPUT_TICKET_ID: ${{ inputs.issue_id }}
-          INPUT_COMMENT_BODY: ${{ inputs.comment }}
+          INPUT_TICKET_ID: ${{ inputs.issue_id || inputs.ticket_id }}
+          INPUT_COMMENT_BODY: ${{ inputs.comment || inputs.comment_body }}
           INPUT_COMMENT_ID: ${{ inputs.comment_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
