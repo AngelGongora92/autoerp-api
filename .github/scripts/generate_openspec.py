@@ -8,11 +8,12 @@ import ssl
 import subprocess
 
 def log(msg):
-    print(f"[OpenSpec Orchestrator] {msg}", flush=True)
+    print(f"[OpenSpec BE Orchestrator] {msg}", flush=True)
 
 # 1. Environment & Event Parsing
 linear_api_key = os.environ.get("LINEAR_API_KEY", "").strip()
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+github_token = os.environ.get("GITHUB_TOKEN", "").strip()
 github_repository = os.environ.get("GITHUB_REPOSITORY", "")
 input_ticket_id = os.environ.get("INPUT_TICKET_ID", "").strip()
 input_comment_body = os.environ.get("INPUT_COMMENT_BODY", "").strip()
@@ -48,9 +49,9 @@ if not ticket_id:
         or ""
     )
 
-# ANTI-LOOP GUARD: Ignore comments created by OpenSpec Bot itself
-if "OpenSpec generado con éxito" in comment_body or "OpenSpec Orchestrator" in comment_body:
-    log("Anti-loop guard triggered: Comment was created by OpenSpec Bot itself. Exiting cleanly.")
+# ANTI-LOOP GUARD
+if "OpenSpec Backend (BE)" in comment_body or "OpenSpec Frontend (FE)" in comment_body or "OpenSpec Orchestrator" in comment_body:
+    log("Anti-loop guard triggered: Comment was created by OpenSpec Bot. Exiting cleanly.")
     sys.exit(0)
 
 if not linear_api_key:
@@ -98,7 +99,7 @@ def post_linear_comment(issue_uuid, comment_markdown):
         log(f"Error posting comment to Linear: {e}")
         return False
 
-# Fallback: If ticket_id is missing but comment_id is present, resolve issue from comment
+# Fallback: If ticket_id is missing but comment_id is present
 if not ticket_id and input_comment_id:
     log(f"Resolving ticket ID from comment_id: {input_comment_id}...")
     get_comment_issue_query = """
@@ -116,8 +117,8 @@ if not ticket_id and input_comment_id:
         res_comment_issue = query_linear(get_comment_issue_query, {"commentId": input_comment_id})
         comment_data = res_comment_issue.get("data", {}).get("comment", {})
         fetched_body = comment_data.get("body", "")
-        if "OpenSpec generado con éxito" in fetched_body or "OpenSpec Orchestrator" in fetched_body:
-            log("Anti-loop guard triggered via comment_id: Comment was created by OpenSpec Bot itself. Exiting cleanly.")
+        if "OpenSpec Backend (BE)" in fetched_body or "OpenSpec Frontend (FE)" in fetched_body:
+            log("Anti-loop guard triggered via comment_id. Exiting cleanly.")
             sys.exit(0)
             
         resolved_issue = comment_data.get("issue")
@@ -128,11 +129,10 @@ if not ticket_id and input_comment_id:
         log(f"Error resolving comment_id: {e}")
 
 if not ticket_id:
-    log("ERROR: No Ticket ID provided in input or payload, and could not resolve from comment_id.")
+    log("ERROR: No Ticket ID provided in input or payload.")
     sys.exit(1)
 
 log(f"Processing Ticket ID: {ticket_id}")
-log(f"Trigger Comment: {comment_body}")
 
 # Fetch Ticket Details
 get_issue_query = """
@@ -156,7 +156,7 @@ res_linear = query_linear(get_issue_query, {"id": ticket_id})
 issue_data = res_linear.get("data", {}).get("issue")
 
 if not issue_data:
-    log(f"ERROR: Could not find Linear issue for ID '{ticket_id}'. Response: {res_linear}")
+    log(f"ERROR: Could not find Linear issue for ID '{ticket_id}'.")
     sys.exit(1)
 
 issue_uuid = issue_data.get("id")
@@ -167,6 +167,15 @@ priority_label = issue_data.get("priorityLabel", "Normal")
 project_name = issue_data.get("project", {}).get("name", "N/A") if issue_data.get("project") else "N/A"
 
 log(f"Fetched Ticket [{identifier}]: {title}")
+
+# Read API_REFERENCE.md if exists
+api_ref_content = ""
+if os.path.exists("API_REFERENCE.md"):
+    try:
+        with open("API_REFERENCE.md", "r", encoding="utf-8") as f:
+            api_ref_content = f.read()[:3000] # first 3000 chars
+    except Exception as e:
+        log(f"Could not read API_REFERENCE.md: {e}")
 
 # 3. Create Git Branch
 def slugify(text):
@@ -182,27 +191,20 @@ try:
     subprocess.run(["git", "fetch", "origin"], check=True)
     res_dev = subprocess.run(["git", "rev-parse", "--verify", "origin/dev"], capture_output=True)
     base_branch = "dev" if res_dev.returncode == 0 else "main"
-    log(f"Base branch selected: {base_branch}")
-
     subprocess.run(["git", "checkout", "-B", branch_name, f"origin/{base_branch}"], check=True)
 except Exception as e:
     log(f"Warning during git branch checkout: {e}")
 
-# 4. Generate OpenSpec via Gemini API using gemini-3.5-flash
-log("Calling Gemini API (model: gemini-3.5-flash) to generate OpenSpec...")
+# 4. Generate OpenSpec for BE via Gemini API using gemini-3.5-flash
+log("Calling Gemini API (gemini-3.5-flash) for Backend analysis...")
 
 prompt = f"""
-Eres un Arquitecto de Software Senior especializado en la metodología OpenSpec y en la plataforma AutoERP.
+Eres un Arquitecto de Software Senior Backend especializado en FastAPI, SQLAlchemy, PostgreSQL, Alembic y OpenSpec para la plataforma AutoERP.
 
-Stack del Proyecto:
-- Backend (BE): Python 3.10+, FastAPI, SQLAlchemy, Alembic, PostgreSQL, Pydantic.
-- Frontend (FE): React 18+, Vite, JavaScript, Tailwind CSS.
+Tu tarea es analizar este ticket y determinar el impacto en el BACKEND (API, Base de Datos, Modelos Pydantic).
 
-Instrucciones:
-Analiza el siguiente ticket de Linear y genera 3 documentos en formato Markdown dentro de una estructura JSON válida:
-1. "proposal": Propuesta técnica del cambio (Contexto, Impacto en BE/FE, Cambios en DB/API, Riesgos).
-2. "spec": Especificación de requerimientos funcionales y no funcionales, contratos de datos API JSON (Pydantic / React interfaces), y criterios de aceptación.
-3. "tasks": Lista detallada de tareas accionables paso a paso con casillas de verificación markdown (- [ ] Tarea).
+Referencia de APIs Existentes en el Proyecto:
+{api_ref_content if api_ref_content else 'Endpoints REST FastAPI estándar'}
 
 Ticket Details:
 - ID: {identifier}
@@ -212,11 +214,14 @@ Ticket Details:
 - Descripción:
 {description}
 
-Responde ÚNICAMENTE con un objeto JSON válido con la siguiente clave y estructura (sin etiquetas de bloque ```json alrededor):
+Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura (sin bloques markdown ```json):
 {{
-  "proposal": "# Propuesta...",
-  "spec": "# Especificación...",
-  "tasks": "# Tareas..."
+  "requires_be_changes": true,
+  "api_summary": "Resumen claro de APIs a crear o APIs existentes a usar",
+  "apis_used": ["POST /api/v1/workshops/...", "GET /api/v1/..."],
+  "proposal": "# Propuesta Backend para {identifier}...",
+  "spec": "# Especificación Backend para {identifier}...",
+  "tasks": "# Tareas Backend para {identifier}..."
 }}
 """
 
@@ -244,18 +249,14 @@ try:
 except Exception as e:
     error_msg = str(e)
     log(f"CRITICAL ERROR in Gemini API call: {error_msg}")
-    
-    # Report error to Linear comment so user is notified immediately
-    err_comment_markdown = f"""⚠️ **Error en OpenSpec Orchestrator**
+    err_comment_markdown = f"""⚠️ **Error en OpenSpec Backend (BE)**
 
 No se pudo generar la especificación técnica para el ticket **[{identifier}]({issue_data.get('url')})**.
 
-❌ **Detalle del Error (Modelo: `gemini-3.5-flash`):**
+❌ **Detalle del Error (`gemini-3.5-flash`):**
 ```
 {error_msg}
 ```
-
-💡 *Por favor revisa la configuración de GEMINI_API_KEY o el nombre del modelo en Google AI Studio.*
 """
     post_linear_comment(issue_uuid, err_comment_markdown)
     sys.exit(1)
@@ -263,10 +264,13 @@ No se pudo generar la especificación técnica para el ticket **[{identifier}]({
 try:
     openspec_json = json.loads(gemini_output_raw)
 except Exception as e:
-    log(f"JSON parsing fallback: {e}")
     clean_raw = re.sub(r"^```json\s*", "", gemini_output_raw.strip(), flags=re.MULTILINE)
     clean_raw = re.sub(r"```$", "", clean_raw.strip(), flags=re.MULTILINE)
     openspec_json = json.loads(clean_raw)
+
+requires_be_changes = openspec_json.get("requires_be_changes", True)
+api_summary = openspec_json.get("api_summary", "Se definen los esquemas de API para Backend.")
+apis_used = openspec_json.get("apis_used", [])
 
 proposal_content = openspec_json.get("proposal", f"# Proposal for {identifier}\n\n{title}")
 spec_content = openspec_json.get("spec", f"# Spec for {identifier}\n\n{title}")
@@ -285,22 +289,55 @@ with open(os.path.join(target_dir, "spec.md"), "w", encoding="utf-8") as f:
 with open(os.path.join(target_dir, "tasks.md"), "w", encoding="utf-8") as f:
     f.write(tasks_content.strip() + "\n")
 
-log(f"OpenSpec files created in {target_dir}/")
+log(f"OpenSpec BE files created in {target_dir}/")
 
-# 6. Post Success Comment on Linear
+# 6. Post BE Comment on Linear
 spec_url_base = f"https://github.com/{github_repository}/tree/{branch_name}/openspec/changes/{identifier}"
+apis_fmt = "\n".join([f"  - `{api}`" for api in apis_used]) if apis_used else "  - Ver especificación en spec.md"
 
-success_comment_markdown = f"""🤖 **OpenSpec generado con éxito**
+be_status_text = "Nuevos endpoints/modelos especificados en BE" if requires_be_changes else "No requiere endpoints nuevos (utiliza APIs existentes)"
 
-Se ha creado la especificación técnica para el ticket **[{identifier}]({issue_data.get('url')})** en la rama `{branch_name}`.
+be_comment_markdown = f"""⚙️ **OpenSpec Backend (BE) Completado**
 
-📄 **Archivos de especificación creados:**
-- [`proposal.md`]({spec_url_base}/proposal.md)
-- [`spec.md`]({spec_url_base}/spec.md)
-- [`tasks.md`]({spec_url_base}/tasks.md)
+- **Estatus APIs:** {be_status_text}
+- **Resumen Contrato API:**
+{apis_fmt}
+- **Rama Git BE:** `{branch_name}`
+- **Specs BE:** [`proposal.md`]({spec_url_base}/proposal.md) | [`spec.md`]({spec_url_base}/spec.md) | [`tasks.md`]({spec_url_base}/tasks.md)
 
-🚀 **Siguiente paso:** El Agente de IA puede consultar esta rama para iniciar la implementación según el protocolo OpenSpec.
+⏳ *Generando especificación para Frontend (FE)... Por favor espera el comentario final.*
 """
 
-post_linear_comment(issue_uuid, success_comment_markdown)
-log("OpenSpec generation workflow script completed successfully.")
+post_linear_comment(issue_uuid, be_comment_markdown)
+log("BE Comment posted successfully to Linear.")
+
+# 7. Cascading Trigger to Frontend Repository (autoerp_fe_1.0)
+target_fe_repo = "AngelGongora92/autoerp_fe_1.0"
+log(f"Triggering Frontend repository: {target_fe_repo}...")
+
+dispatch_url = f"https://api.github.com/repos/{target_fe_repo}/dispatches"
+dispatch_headers = {
+    "Authorization": f"Bearer {github_token if github_token else linear_api_key}",
+    "Accept": "application/vnd.github+json",
+    "Content-Type": "application/json",
+    "User-Agent": "OpenSpec-Orchestrator"
+}
+dispatch_payload = {
+    "event_type": "linear_comment",
+    "client_payload": {
+        "ticket_id": identifier,
+        "comment_body": comment_body,
+        "requires_be_changes": requires_be_changes,
+        "api_summary": api_summary,
+        "apis_used": apis_used
+    }
+}
+
+try:
+    req_fe = urllib.request.Request(dispatch_url, data=json.dumps(dispatch_payload).encode("utf-8"), headers=dispatch_headers)
+    with urllib.request.urlopen(req_fe, context=ctx) as resp_fe:
+        log("Successfully triggered Frontend workflow in cascade!")
+except Exception as e:
+    log(f"Warning: Could not trigger Frontend workflow via API: {e}")
+
+log("Backend OpenSpec Orchestrator completed successfully.")
