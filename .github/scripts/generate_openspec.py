@@ -48,6 +48,11 @@ if not ticket_id:
         or ""
     )
 
+# ANTI-LOOP GUARD: Ignore comments created by OpenSpec Bot itself
+if "OpenSpec generado con éxito" in comment_body or "OpenSpec Orchestrator" in comment_body:
+    log("Anti-loop guard triggered: Comment was created by OpenSpec Bot itself. Exiting cleanly.")
+    sys.exit(0)
+
 if not linear_api_key:
     log("ERROR: LINEAR_API_KEY secret is missing in GitHub Secrets.")
     sys.exit(1)
@@ -99,6 +104,7 @@ if not ticket_id and input_comment_id:
     get_comment_issue_query = """
     query GetCommentIssue($commentId: String!) {
       comment(id: $commentId) {
+        body
         issue {
           id
           identifier
@@ -108,7 +114,13 @@ if not ticket_id and input_comment_id:
     """
     try:
         res_comment_issue = query_linear(get_comment_issue_query, {"commentId": input_comment_id})
-        resolved_issue = res_comment_issue.get("data", {}).get("comment", {}).get("issue")
+        comment_data = res_comment_issue.get("data", {}).get("comment", {})
+        fetched_body = comment_data.get("body", "")
+        if "OpenSpec generado con éxito" in fetched_body or "OpenSpec Orchestrator" in fetched_body:
+            log("Anti-loop guard triggered via comment_id: Comment was created by OpenSpec Bot itself. Exiting cleanly.")
+            sys.exit(0)
+            
+        resolved_issue = comment_data.get("issue")
         if resolved_issue:
             ticket_id = resolved_issue.get("identifier") or resolved_issue.get("id")
             log(f"Resolved ticket ID: {ticket_id}")
