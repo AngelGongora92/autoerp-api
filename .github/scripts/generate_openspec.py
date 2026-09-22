@@ -73,6 +73,26 @@ def query_linear(query, variables=None):
     with urllib.request.urlopen(req, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
+def post_linear_comment(issue_uuid, comment_markdown):
+    comment_mutation = """
+    mutation CommentCreate($input: CommentCreateInput!) {
+      commentCreate(input: $input) {
+        success
+      }
+    }
+    """
+    try:
+        res = query_linear(comment_mutation, {
+            "input": {
+                "issueId": issue_uuid,
+                "body": comment_markdown
+            }
+        })
+        return res.get("data", {}).get("commentCreate", {}).get("success", False)
+    except Exception as e:
+        log(f"Error posting comment to Linear: {e}")
+        return False
+
 # Fallback: If ticket_id is missing but comment_id is present, resolve issue from comment
 if not ticket_id and input_comment_id:
     log(f"Resolving ticket ID from comment_id: {input_comment_id}...")
@@ -86,11 +106,14 @@ if not ticket_id and input_comment_id:
       }
     }
     """
-    res_comment_issue = query_linear(get_comment_issue_query, {"commentId": input_comment_id})
-    resolved_issue = res_comment_issue.get("data", {}).get("comment", {}).get("issue")
-    if resolved_issue:
-        ticket_id = resolved_issue.get("identifier") or resolved_issue.get("id")
-        log(f"Resolved ticket ID: {ticket_id}")
+    try:
+        res_comment_issue = query_linear(get_comment_issue_query, {"commentId": input_comment_id})
+        resolved_issue = res_comment_issue.get("data", {}).get("comment", {}).get("issue")
+        if resolved_issue:
+            ticket_id = resolved_issue.get("identifier") or resolved_issue.get("id")
+            log(f"Resolved ticket ID: {ticket_id}")
+    except Exception as e:
+        log(f"Error resolving comment_id: {e}")
 
 if not ticket_id:
     log("ERROR: No Ticket ID provided in input or payload, and could not resolve from comment_id.")
@@ -153,8 +176,8 @@ try:
 except Exception as e:
     log(f"Warning during git branch checkout: {e}")
 
-# 4. Generate OpenSpec via Gemini API
-log("Calling Gemini API to generate OpenSpec...")
+# 4. Generate OpenSpec via Gemini API using gemini-3.5-flash
+log("Calling Gemini API (model: gemini-3.5-flash) to generate OpenSpec...")
 
 prompt = f"""
 Eres un Arquitecto de Software Senior especializado en la metodología OpenSpec y en la plataforma AutoERP.
@@ -185,31 +208,45 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente clave y estruct
 }}
 """
 
-def call_gemini(prompt_text):
-    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-2.0-flash", "gemini-1.5-pro"]
-    last_err = None
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_api_key}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt_text}]}],
-            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
-        }
-        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, context=ctx) as resp:
-                res_data = json.loads(resp.read().decode("utf-8"))
-                text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                return text
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8")
-            last_err = f"HTTP {e.code}: {err_body}"
-            log(f"Model {model} failed with HTTP {e.code}: {err_body[:200]}")
-        except Exception as e:
-            last_err = str(e)
-            log(f"Model {model} failed: {e}")
-    raise Exception(f"All Gemini models failed. Last error: {last_err}")
+def call_gemini_strict(prompt_text):
+    model = "gemini-3.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt_text}]}],
+        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, context=ctx) as resp:
+            res_data = json.loads(resp.read().decode("utf-8"))
+            text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+            return text
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        raise Exception(f"Error HTTP {e.code} con modelo {model}: {err_body}")
+    except Exception as e:
+        raise Exception(f"Error con modelo {model}: {str(e)}")
 
-gemini_output_raw = call_gemini(prompt)
+try:
+    gemini_output_raw = call_gemini_strict(prompt)
+except Exception as e:
+    error_msg = str(e)
+    log(f"CRITICAL ERROR in Gemini API call: {error_msg}")
+    
+    # Report error to Linear comment so user is notified immediately
+    err_comment_markdown = f"""⚠️ **Error en OpenSpec Orchestrator**
+
+No se pudo generar la especificación técnica para el ticket **[{identifier}]({issue_data.get('url')})**.
+
+❌ **Detalle del Error (Modelo: `gemini-3.5-flash`):**
+```
+{error_msg}
+```
+
+💡 *Por favor revisa la configuración de GEMINI_API_KEY o el nombre del modelo en Google AI Studio.*
+"""
+    post_linear_comment(issue_uuid, err_comment_markdown)
+    sys.exit(1)
 
 try:
     openspec_json = json.loads(gemini_output_raw)
@@ -238,18 +275,10 @@ with open(os.path.join(target_dir, "tasks.md"), "w", encoding="utf-8") as f:
 
 log(f"OpenSpec files created in {target_dir}/")
 
-# 6. Post Comment on Linear
-comment_mutation = """
-mutation CommentCreate($input: CommentCreateInput!) {
-  commentCreate(input: $input) {
-    success
-  }
-}
-"""
-
+# 6. Post Success Comment on Linear
 spec_url_base = f"https://github.com/{github_repository}/tree/{branch_name}/openspec/changes/{identifier}"
 
-comment_markdown = f"""🤖 **OpenSpec generado con éxito**
+success_comment_markdown = f"""🤖 **OpenSpec generado con éxito**
 
 Se ha creado la especificación técnica para el ticket **[{identifier}]({issue_data.get('url')})** en la rama `{branch_name}`.
 
@@ -261,16 +290,5 @@ Se ha creado la especificación técnica para el ticket **[{identifier}]({issue_
 🚀 **Siguiente paso:** El Agente de IA puede consultar esta rama para iniciar la implementación según el protocolo OpenSpec.
 """
 
-res_comment = query_linear(comment_mutation, {
-    "input": {
-        "issueId": issue_uuid,
-        "body": comment_markdown
-    }
-})
-
-if res_comment.get("data", {}).get("commentCreate", {}).get("success"):
-    log("Successfully posted notification comment to Linear ticket!")
-else:
-    log(f"Warning: Could not post comment to Linear: {res_comment}")
-
+post_linear_comment(issue_uuid, success_comment_markdown)
 log("OpenSpec generation workflow script completed successfully.")
