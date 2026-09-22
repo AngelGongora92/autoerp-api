@@ -5,15 +5,19 @@ on:
     types: [linear_comment]
   workflow_dispatch:
     inputs:
-      ticket_id:
-        description: 'ID del ticket en Linear (ej. AUT-31)'
+      issue_id:
+        description: 'ID del ticket en Linear (ej. AUT-31 o UUID)'
         required: true
         type: string
-      comment_body:
+      comment:
         description: 'Texto del comentario disparador'
         required: false
         type: string
         default: '#openspec'
+      comment_id:
+        description: 'ID del comentario en Linear'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -39,8 +43,9 @@ jobs:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EVENT_PAYLOAD: ${{ json(github.event) }}
-          INPUT_TICKET_ID: ${{ inputs.ticket_id }}
-          INPUT_COMMENT_BODY: ${{ inputs.comment_body }}
+          INPUT_TICKET_ID: ${{ inputs.issue_id }}
+          INPUT_COMMENT_BODY: ${{ inputs.comment }}
+          INPUT_COMMENT_ID: ${{ inputs.comment_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python .github/scripts/generate_openspec.py
