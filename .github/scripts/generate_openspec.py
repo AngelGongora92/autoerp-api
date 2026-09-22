@@ -11,8 +11,8 @@ def log(msg):
     print(f"[OpenSpec Orchestrator] {msg}", flush=True)
 
 # 1. Environment & Event Parsing
-linear_api_key = os.environ.get("LINEAR_API_KEY")
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
+linear_api_key = os.environ.get("LINEAR_API_KEY", "").strip()
+gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
 github_repository = os.environ.get("GITHUB_REPOSITORY", "")
 input_ticket_id = os.environ.get("INPUT_TICKET_ID", "").strip()
 input_comment_body = os.environ.get("INPUT_COMMENT_BODY", "").strip()
@@ -28,7 +28,6 @@ ticket_id = input_ticket_id
 comment_body = input_comment_body
 
 if not ticket_id:
-    # Try parsing repository_dispatch client_payload or inputs
     client_payload = event_payload.get("client_payload", {})
     inputs_payload = event_payload.get("inputs", {})
     ticket_id = (
@@ -50,11 +49,11 @@ if not ticket_id:
     )
 
 if not linear_api_key:
-    log("ERROR: LINEAR_API_KEY secret is missing.")
+    log("ERROR: LINEAR_API_KEY secret is missing in GitHub Secrets.")
     sys.exit(1)
 
 if not gemini_api_key:
-    log("ERROR: GEMINI_API_KEY secret is missing.")
+    log("ERROR: GEMINI_API_KEY secret is missing in GitHub Secrets.")
     sys.exit(1)
 
 # SSL Context
@@ -144,7 +143,6 @@ def slugify(text):
 branch_name = f"feat-{identifier.lower()}-{slugify(title)}"
 log(f"Target Branch Name: {branch_name}")
 
-# Run git operations to switch branch
 try:
     subprocess.run(["git", "fetch", "origin"], check=True)
     res_dev = subprocess.run(["git", "rev-parse", "--verify", "origin/dev"], capture_output=True)
@@ -188,7 +186,7 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente clave y estruct
 """
 
 def call_gemini(prompt_text):
-    models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-2.0-flash", "gemini-1.5-pro"]
     last_err = None
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_api_key}"
@@ -202,9 +200,13 @@ def call_gemini(prompt_text):
                 res_data = json.loads(resp.read().decode("utf-8"))
                 text = res_data["candidates"][0]["content"]["parts"][0]["text"]
                 return text
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            last_err = f"HTTP {e.code}: {err_body}"
+            log(f"Model {model} failed with HTTP {e.code}: {err_body[:200]}")
         except Exception as e:
-            last_err = e
-            log(f"Model {model} failed: {e}. Trying next fallback...")
+            last_err = str(e)
+            log(f"Model {model} failed: {e}")
     raise Exception(f"All Gemini models failed. Last error: {last_err}")
 
 gemini_output_raw = call_gemini(prompt)
