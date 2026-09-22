@@ -50,7 +50,7 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          EVENT_PAYLOAD: ${{ json(github.event) }}
+          EVENT_PAYLOAD: ${{ toJson(github.event) }}
           INPUT_TICKET_ID: ${{ inputs.issue_id || inputs.ticket_id }}
           INPUT_COMMENT_BODY: ${{ inputs.comment || inputs.comment_body }}
           INPUT_COMMENT_ID: ${{ inputs.comment_id }}
