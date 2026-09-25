@@ -17,6 +17,9 @@ class RescheduleRequest(BaseModel):
     send_whatsapp: bool = False
     send_email: bool = False
 
+class CancelRequest(BaseModel):
+    cancellation_reason: Optional[str] = None
+
 class ResendConfirmationRequest(BaseModel):
     send_whatsapp: bool = False
     send_email: bool = False
@@ -281,6 +284,7 @@ async def reschedule_appointment(
 @router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
 async def cancel_appointment(
     appointment_id: int,
+    payload: Optional[CancelRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -299,6 +303,10 @@ async def cancel_appointment(
         db.flush()
         
     appointment.status_id = 3  # Cancelado
+    if payload and payload.cancellation_reason:
+        appointment.cancellation_reason = payload.cancellation_reason
+    appointment.cancellation_date = datetime.now(dt_module.timezone.utc)
+
     db.commit()
     db.refresh(appointment)
     return appointment
