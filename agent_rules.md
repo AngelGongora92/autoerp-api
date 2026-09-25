@@ -55,11 +55,18 @@ Para evitar pérdidas de integridad en datos históricos e inconsistencias de cl
      ```
      para prevenir errores de clave duplicada (`UniqueViolation`) en futuros inserts autoincrementales de producción o pruebas.
 
-3. **Migraciones:**
-   * Cualquier modificación en los modelos de SQLAlchemy que altere la base de datos debe incluir su respectivo script de migración generado mediante Alembic antes de proceder al desarrollo de los endpoints.
+3. **Uso Obligatorio de Migraciones con Alembic:**
+   * **PROHIBIDO** confiar únicamente en `Base.metadata.create_all()` para modificar esquemas existentes, ya que SQLAlchemy NO modifica ni añade columnas a tablas físicas ya existentes.
+   * Cualquier modificación en los modelos de SQLAlchemy que altere la base de datos (nuevas tablas, columnas, índices o llaves foráneas) DEBE incluir su script de migración correspondiente generado mediante `alembic revision --autogenerate -m "<descripcion_ticket>"`.
 
-4. **Conflictos de Alembic:**
-   * Antes de generar una nueva migración con Alembic, asegúrate de estar parado sobre la versión más reciente de `main` actualizada para evitar ramas cruzadas, conflictos de IDs de revisión duplicados o desfases en la base de datos.
+4. **Prevención de Corrupción de Datos y Conflictos de Alembic:**
+   * **No Eliminación Destructiva:** Queda prohibido eliminar columnas o tablas físicas con datos existentes sin aprobación explícita.
+   * **Columnas Opcionales / Defaults:** Al agregar columnas a tablas con registros preexistentes, siempre definirlas como `nullable=True` o con `server_default` para evitar errores `NOT NULL`.
+   * **Verificación Previa a PR:** Antes de enviar un PR, ejecutar `alembic heads` para descartar bifurcaciones en las revisiones y verificar que `alembic upgrade head` se ejecute sin errores SQL.
+
+5. **Migración Automática en Producción:**
+   * El servicio FastAPI ejecuta `alembic upgrade head` automáticamente en el evento de inicio (`startup`). Esto garantiza que los despliegues en Vercel/Supabase actualicen la base de datos de producción sin requerir intervención manual.
+
 
 ---
 

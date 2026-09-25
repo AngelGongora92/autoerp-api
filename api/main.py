@@ -19,6 +19,10 @@ from api import settings as settings_router # Importa el router de configuració
 from api import whatsapp as whatsapp_router # Importa el router de WhatsApp
 from api import websocket as websocket_router # Importa el router de WebSockets
 
+from alembic.config import Config
+from alembic import command
+import os
+
 # --- Creación de Tablas en la Base de Datos ---
 # Se hizo el cambio a Alembic, ahora Alembic maneja las migraciones.
 
@@ -28,6 +32,23 @@ app = FastAPI(
     description="API de prueba para el proyecto de gestión.",
     version="1.0.0",
 )
+
+@app.on_event("startup")
+def run_migrations_on_startup():
+    """
+    Ejecuta 'alembic upgrade head' al iniciar la aplicación FastAPI
+    para mantener el esquema de PostgreSQL sincronizado automáticamente en producción.
+    """
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        alembic_cfg_path = os.path.join(base_dir, "alembic.ini")
+        if os.path.exists(alembic_cfg_path):
+            alembic_cfg = Config(alembic_cfg_path)
+            command.upgrade(alembic_cfg, "head")
+            print("🚀 Migraciones de Base de Datos aplicadas correctamente (Alembic upgrade head).")
+    except Exception as e:
+        print(f"⚠️ Error al ejecutar migraciones automáticas en startup: {e}")
+
 
 origins = [
     "http://localhost:5173",
