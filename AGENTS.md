@@ -75,3 +75,24 @@ Antes de comenzar la fase de codificación de cualquier ticket o requerimiento:
 Si para completar la tarea se requieren acciones que escapan a la autonomía del agente (como configurar secretos en GitHub, crear variables de entorno `.env`, registrar webhooks o modificar paneles externos en Linear/Vercel/Supabase):
 
 - El agente **DEBE notificar al usuario explícitamente al inicio o en cuanto se identifique la necesidad**, listando paso a paso los valores y la ubicación exacta de las configuraciones manuales requeridas.
+
+---
+
+## 🗄️ 6. Protocolo y Seguridad en Base de Datos y Migraciones (PostgreSQL + Alembic)
+
+1. **Uso Obligatorio de Alembic para Modificaciones de Esquema:**
+   - **PROHIBIDO** confiar únicamente en `Base.metadata.create_all()` para modificar esquemas en producción o desarrollo. SQLAlchemy NO altera ni añade columnas a tablas físicas ya existentes.
+   - Cualquier adición, eliminación o modificación de columnas/tablas en los modelos de SQLAlchemy (`BE/api/database.py` o modelos del BE) exige generar un script de migración con Alembic: `alembic revision --autogenerate -m "<descripcion_ticket>"`.
+
+2. **Prevención de Incompatibilidades y Corrupción de Datos (Buenas Prácticas de BD):**
+   - **Cero Pérdida de Datos:** Queda estrictamente prohibido eliminar columnas o tablas físicas que contengan datos históricos activos sin la aprobación explícita y documentada del usuario.
+   - **Adición Segura de Columnas:** Al agregar columnas a tablas preexistentes con datos, la columna DEBE ser opcional (`nullable=True`) o contar con un valor por defecto en servidor (`server_default="..."` o un paso intermedio que pueble los registros antiguos) para evitar fallos de restricción `NOT NULL`.
+   - **Compatibilidad Hacia Atrás:** Modificaciones de tipos de datos o renombrado de campos deben garantizar la integridad previa y reflejarse adecuadamente tanto en `upgrade()` como en `downgrade()`.
+
+3. **Verificación Previa a Subir Ramas y Abrir PRs:**
+   - Ejecutar y verificar `alembic heads` para confirmar que no existan múltiples cabezas ni conflictos en el historial de revisiones.
+   - Probar `alembic upgrade head` localmente para asegurar que la migración corre limpiamente sin errores SQL ni de sintaxis.
+
+4. **Sincronización Automática en Despliegues de Producción:**
+   - El backend ejecuta automáticamente `alembic upgrade head` durante el inicio de FastAPI (`app.on_event("startup")`). Esto asegura que cuando se haga merge a `main` y Vercel redespliegue, la base de datos de producción (Supabase) se actualice sin requerir ejecuciones manuales por consola.
+
