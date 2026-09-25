@@ -40,6 +40,8 @@ class AppointmentResponse(BaseModel):
     appointment_date: datetime
     notes: Optional[str] = None
     rescheduled_count: int
+    cancellation_reason: Optional[str] = None
+    cancellation_date: Optional[datetime] = None
     temp_cname: Optional[str] = None
     temp_fname: Optional[str] = None
     temp_lname: Optional[str] = None

@@ -363,6 +363,8 @@ class Appointment(Base):
     notes = Column(String(256), nullable=True)
     rescheduled_count = Column(Integer, default=0)
     company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
+    cancellation_reason = Column(String(256), nullable=True)
+    cancellation_date = Column(TIMESTAMP(timezone=True), nullable=True)
 
     company = relationship('Company')
 
