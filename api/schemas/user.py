@@ -559,7 +559,16 @@ class AppointmentReasonResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     reason_id: int
     reason: str
-    duration_minutes: int
+    duration_minutes: Optional[int] = 60
+
+class AppointmentReasonCreate(BaseModel):
+    reason: str
+    duration_minutes: Optional[int] = 60
+
+class AppointmentReasonUpdate(BaseModel):
+    reason: Optional[str] = None
+    duration_minutes: Optional[int] = None
+
 
 # --- Esquemas para Horarios de Empleados ---
 

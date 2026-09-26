@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User
+from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings
 from api.auth_deps import get_current_user
-from .schemas.user import AppointmentCreate, AppointmentResponse, AppointmentStatusResponse, AppointmentReasonResponse
+from .schemas.user import AppointmentCreate, AppointmentResponse, AppointmentStatusResponse, AppointmentReasonResponse, AppointmentReasonCreate, AppointmentReasonUpdate
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
 from datetime import datetime
@@ -138,6 +138,34 @@ async def create_appointment(
             detail="No se pueden agendar citas en el pasado."
         )
 
+    # Validación con la configuración de citas de la empresa
+    settings = db.query(CompanySettings).filter(CompanySettings.id == 1).first()
+    if settings:
+        local_tz = ZoneInfo("America/Mexico_City")
+        local_appt = appt_date.astimezone(local_tz)
+        
+        # Validar día de la semana (0=Lunes, ..., 6=Domingo)
+        if settings.allowed_days is not None and isinstance(settings.allowed_days, list):
+            if local_appt.weekday() not in settings.allowed_days:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El día seleccionado no está habilitado para agendar citas."
+                )
+        
+        # Validar rango de horario
+        appt_time = local_appt.time()
+        if settings.appointment_start_time and appt_time < settings.appointment_start_time:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"La hora de la cita debe ser a partir de las {settings.appointment_start_time.strftime('%H:%M')}."
+            )
+        if settings.appointment_end_time and appt_time > settings.appointment_end_time:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"La hora de la cita debe ser anterior a las {settings.appointment_end_time.strftime('%H:%M')}."
+            )
+
+
     # 1. Extraer los datos y separar la lista de IDs de razones y flags de notificación
     data = appointment_data.model_dump()
     reason_ids = data.pop("reason_ids", [])
@@ -171,6 +199,78 @@ async def get_appointment_reasons(
     """
     reasons = db.execute(select(AppointmentReason)).scalars().all()
     return reasons
+
+@router.post("/reasons/", response_model=AppointmentReasonResponse)
+async def create_appointment_reason(
+    reason_data: AppointmentReasonCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Crea un nuevo tipo o razón de cita.
+    """
+    existing = db.execute(select(AppointmentReason).where(AppointmentReason.reason == reason_data.reason)).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ya existe un tipo de cita con ese nombre."
+        )
+    
+    new_reason = AppointmentReason(
+        reason=reason_data.reason,
+        duration_minutes=reason_data.duration_minutes or 60
+    )
+    db.add(new_reason)
+    db.commit()
+    db.refresh(new_reason)
+    return new_reason
+
+@router.put("/reasons/{reason_id}", response_model=AppointmentReasonResponse)
+async def update_appointment_reason(
+    reason_id: int,
+    reason_data: AppointmentReasonUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Actualiza un tipo de cita existente.
+    """
+    reason_obj = db.get(AppointmentReason, reason_id)
+    if not reason_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tipo de cita no encontrado."
+        )
+    
+    if reason_data.reason is not None:
+        reason_obj.reason = reason_data.reason
+    if reason_data.duration_minutes is not None:
+        reason_obj.duration_minutes = reason_data.duration_minutes
+        
+    db.commit()
+    db.refresh(reason_obj)
+    return reason_obj
+
+@router.delete("/reasons/{reason_id}")
+async def delete_appointment_reason(
+    reason_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Elimina un tipo de cita.
+    """
+    reason_obj = db.get(AppointmentReason, reason_id)
+    if not reason_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tipo de cita no encontrado."
+        )
+    
+    db.delete(reason_obj)
+    db.commit()
+    return {"message": "Tipo de cita eliminado exitosamente."}
+
 
 @router.get("/public/{appointment_id}", response_model=AppointmentResponse)
 async def get_public_appointment(
