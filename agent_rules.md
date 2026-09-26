@@ -21,10 +21,12 @@ Antes de modificar cualquier parte del código, el agente debe seguir obligatori
    * Antes de realizar cualquier cambio, se debe asegurar la existencia de un ticket en Linear que represente la tarea, especificando claramente si corresponde al **FE (Frontend)** o **BE (Backend)**.
    * Se debe documentar el **Plan de Implementación** (ya sea en el ticket de Linear o en un archivo `implementation_plan.md` si es un feature complejo) antes de escribir código.
 
-2. **Inicio del Desarrollo:**
-   * Crear siempre una rama de Git descriptiva a partir del `main` actualizado (ej. `feature/AUT-XX-descripcion-corta` o `bugfix/AUT-XX-error`).
+2. **Inicio del Desarrollo (PRIMER PASO OBLIGATORIO):**
+   * **Verificación y cambio de rama antes de leer/escribir specs:** Buscar en Git (`git branch -a | grep -i "<ticket_id>"`) si la rama del ticket ya existe. Si existe, cambiarse a ella (`git checkout <rama>` y `git pull`). Si no existe, actualizar `main` (`git checkout main && git pull`) y crear la rama (ej. `feat/AUT-XX-descripcion-corta` o `fix/AUT-XX-descripcion-corta`).
+   * **Revisión de Specs dentro de la Rama:** Una vez posicionado en la rama del ticket, leer o redactar los archivos de especificacion OpenSpec (`openspec/changes/<ticket_id>/`).
    * Cambiar el estado del ticket en Linear a **"In Progress"** (En Progreso).
    * **NUNCA** hacer commits directos ni pushes a `main`.
+
 
 3. **Finalización del Trabajo y Revisión:**
    * Escribir commits claros y descriptivos siguiendo la convención de *Conventional Commits* (ej. `feat(employees): add delete endpoint...`).

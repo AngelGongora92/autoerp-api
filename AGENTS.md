@@ -42,19 +42,31 @@ El proyecto está estructurado en los siguientes módulos principales:
 
 ---
 
-## 📋 3. Protocolo OpenSpec
+## 📋 3. Secuencia Obligatoria de Inicio de Ticket y Protocolo OpenSpec
 
-Antes de comenzar la fase de codificación de cualquier ticket o requerimiento:
+Cuando el usuario solicite trabajar en un ticket (ej. `AUT-33` o `ticket 33`), el agente DEBE seguir estrictamente esta secuencia paso a paso:
 
-1. **Lectura de Especificaciones:**
-   - El agente DEBE consultar y leer detenidamente la especificación activa en `openspec/changes/<ticket_id>/`:
-     - `proposal.md`: Explicación del problema, contexto e impacto arquitectónico.
-     - `spec.md`: Requerimientos funcionales, contratos de datos y criterios de aceptación.
+1. **Paso 1: Verificación y Posicionamiento en la Rama del Ticket (PRIMER PASO OBLIGATORIO):**
+   - Antes de leer o buscar archivos de especificación, el agente DEBE verificar si existe una rama local o remota vinculada al ticket:
+     ```bash
+     git branch -a | grep -i "<ticket_id>"
+     ```
+   - **Si la rama existe:** Cambiarse a ella con `git checkout <nombre_rama>` (y sincronizar con `git pull`).
+   - **Si no existe:** Actualizar `main` (`git checkout main && git pull`) y crear la nueva rama con el formato: `feat/<ticket_id>-<descripcion-corta>` o `fix/<ticket_id>-<descripcion-corta>`.
+
+2. **Paso 2: Lectura o Creación de Especificaciones OpenSpec (Posicionado en la Rama):**
+   - Ya estando dentro de la rama del ticket, consultar la especificación activa en `openspec/changes/<ticket_id>/`:
+     - `proposal.md`: Contexto e impacto.
+     - `spec.md`: Requerimientos funcionales y criterios de aceptación.
      - `tasks.md`: Lista paso a paso de subtareas a ejecutar.
-2. **Seguimiento de Progreso:**
+   - Si los archivos de especificación no existen aún en la rama, el agente DEBE redactarlos como primer commit antes de codificar.
+
+3. **Paso 3: Seguimiento y Ejecución de Tareas:**
    - Conforme el agente complete cada subtarea de `tasks.md`, debe actualizar el archivo marcando la casilla correspondiente `[x]`.
-3. **Archivado al Finalizar:**
-   - Una vez completado el ticket, aprobado el PR e integrado el código, la carpeta de la especificación en `openspec/changes/<ticket_id>/` debe mover a `openspec/changes/archive/<ticket_id>/`.
+
+4. **Paso 4: Archivado al Finalizar:**
+   - Una vez completado el ticket, aprobado el PR e integrado el código a `main`, la carpeta de la especificación en `openspec/changes/<ticket_id>/` debe moverse a `openspec/changes/archive/<ticket_id>/`.
+
 
 ---
 
