@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 
 from .customers import CustomerInfoForAppointment
 from .vehicles import VehicleInfoForAppointment
+from .user import EmployeeResponseShort
 
 
 class AppointmentCreate(BaseModel):
@@ -23,6 +24,7 @@ class AppointmentCreate(BaseModel):
     temp_vehicle_data: Optional[Dict[str, Any]] = None
 
     appointment_date: datetime
+    duration_minutes: Optional[int] = None
     reason_ids: List[int]
     status_id: int
     notes: Optional[str] = None
@@ -38,6 +40,7 @@ class AppointmentResponse(BaseModel):
     scheduled_by: Optional[int] = None
     assigned_to: Optional[int] = None
     appointment_date: datetime
+    duration_minutes: int = 30
     notes: Optional[str] = None
     rescheduled_count: int
     cancellation_reason: Optional[str] = None
@@ -52,6 +55,12 @@ class AppointmentResponse(BaseModel):
     reasons: List["AppointmentReasonResponse"] = []
     customer: Optional[CustomerInfoForAppointment] = None
     vehicle: Optional[VehicleInfoForAppointment] = None
+    assignee: Optional[EmployeeResponseShort] = None
+
+class TimeSlotAvailability(BaseModel):
+    time_slot: str
+    is_available: bool
+    available_advisors_count: int
 
 class AppointmentStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

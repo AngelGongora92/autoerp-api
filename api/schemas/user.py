@@ -522,6 +522,7 @@ class AppointmentCreate(BaseModel):
     temp_phone: Optional[str] = None
     temp_vehicle_data: Optional[Dict[str, Any]] = None
     appointment_date: datetime
+    duration_minutes: Optional[int] = None
     reason_ids: List[int]
     status_id: int
     notes: Optional[str] = None
@@ -537,6 +538,7 @@ class AppointmentResponse(BaseModel):
     scheduled_by: Optional[int] = None
     assigned_to: Optional[int] = None
     appointment_date: datetime
+    duration_minutes: int = 30
     notes: Optional[str] = None
     rescheduled_count: int
     temp_cname: Optional[str] = None
