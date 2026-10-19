@@ -108,3 +108,8 @@ Si para completar la tarea se requieren acciones que escapan a la autonomía del
 4. **Sincronización Automática en Despliegues de Producción:**
    - El backend ejecuta automáticamente `alembic upgrade head` durante el inicio de FastAPI (`app.on_event("startup")`). Esto asegura que cuando se haga merge a `main` y Vercel redespliegue, la base de datos de producción (Supabase) se actualice sin requerir ejecuciones manuales por consola.
 
+5. **Requisitos de Nuevos Tenants (Onboarding y Datos Mínimos):**
+   - Al registrar o sembrar un nuevo tenant/empresa en la base de datos, es **obligatorio** crear al menos un empleado activo con `position_id = 1` (Asesor) y asignar los 7 permisos del sistema en `user_permissions`.
+   - Sin un asesor activo, el módulo de citas (`/appointments/` y `/appointments/availability`) responderá `HTTP 400 Bad Request: "No hay asesores disponibles en el horario seleccionado"`.
+   - Consultar la guía completa de onboarding y scripts de siembra en [TENANT_ONBOARDING.md](file:///Users/rafipacheco/AutoERP_Project/BE/TENANT_ONBOARDING.md).
+

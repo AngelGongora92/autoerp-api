@@ -69,6 +69,10 @@ Para evitar pérdidas de integridad en datos históricos e inconsistencias de cl
 5. **Migración Automática en Producción:**
    * El servicio FastAPI ejecuta `alembic upgrade head` automáticamente en el evento de inicio (`startup`). Esto garantiza que los despliegues en Vercel/Supabase actualicen la base de datos de producción sin requerir intervención manual.
 
+6. **Requisitos de Nuevos Tenants (Onboarding y Datos Mínimos):**
+   * Al registrar o sembrar una nueva empresa/tenant en la base de datos, es **estrictamente obligatorio** crear al menos un empleado activo con `position_id = 1` (Asesor) y asignar los 7 permisos del sistema en `user_permissions`.
+   * Si no existe un asesor activo, la creación y consulta de disponibilidad de citas (`/appointments/` y `/appointments/availability`) arrojará un error `HTTP 400: "No hay asesores disponibles en el horario seleccionado"`.
+   * Consultar la guía detallada de aprovisionamiento, dependencias y scripts de siembra en [TENANT_ONBOARDING.md](file:///Users/rafipacheco/AutoERP_Project/BE/TENANT_ONBOARDING.md).
 
 ---
 
