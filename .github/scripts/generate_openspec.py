@@ -262,11 +262,18 @@ No se pudo generar la especificación técnica para el ticket **[{identifier}]({
     sys.exit(1)
 
 try:
-    openspec_json = json.loads(gemini_output_raw)
-except Exception as e:
+    openspec_json = json.loads(gemini_output_raw, strict=False)
+except Exception:
     clean_raw = re.sub(r"^```json\s*", "", gemini_output_raw.strip(), flags=re.MULTILINE)
     clean_raw = re.sub(r"```$", "", clean_raw.strip(), flags=re.MULTILINE)
-    openspec_json = json.loads(clean_raw)
+    try:
+        openspec_json = json.loads(clean_raw, strict=False)
+    except Exception:
+        match = re.search(r"\{.*\}", clean_raw, re.DOTALL)
+        if match:
+            openspec_json = json.loads(match.group(0), strict=False)
+        else:
+            raise
 
 requires_be_changes = openspec_json.get("requires_be_changes", True)
 api_summary = openspec_json.get("api_summary", "Se definen los esquemas de API para Backend.")
