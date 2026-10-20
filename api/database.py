@@ -365,6 +365,7 @@ class Appointment(Base):
     company_id = Column(Integer, ForeignKey('companies.company_id', ondelete='SET NULL'), nullable=True)
     cancellation_reason = Column(String(256), nullable=True)
     cancellation_date = Column(TIMESTAMP(timezone=True), nullable=True)
+    duration_minutes = Column(Integer, default=30, server_default='30', nullable=False)
 
     company = relationship('Company')
 

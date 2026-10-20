@@ -2,9 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings
+from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee
 from api.auth_deps import get_current_user
-from .schemas.user import AppointmentCreate, AppointmentResponse, AppointmentStatusResponse, AppointmentReasonResponse, AppointmentReasonCreate, AppointmentReasonUpdate
+from .schemas.appointments import (
+    AppointmentCreate,
+    AppointmentResponse,
+    AppointmentStatusResponse,
+    AppointmentReasonResponse,
+    AppointmentReasonCreate,
+    AppointmentReasonUpdate,
+    TimeSlotAvailability,
+)
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
 from datetime import datetime
@@ -82,6 +90,110 @@ async def notify_appointment_confirmation(appointment: Appointment, send_whatsap
         await send_email_confirmation_brevo(customer_email, customer_name, date_str, vehicle_info, appointment.appointment_id)
 
 
+def check_advisor_availability(
+    advisor_id: int,
+    start_dt: datetime,
+    duration_minutes: int,
+    db: Session,
+    exclude_appointment_id: Optional[int] = None
+) -> bool:
+    """
+    Verifica si un asesor específico está libre en el rango [start_dt, start_dt + duration_minutes].
+    Retorna True si está libre, False si tiene empalme con otra cita activa (no cancelada).
+    """
+    if start_dt.tzinfo is None:
+        new_start = start_dt.replace(tzinfo=dt_module.timezone.utc)
+    else:
+        new_start = start_dt.astimezone(dt_module.timezone.utc)
+
+    new_end = new_start + dt_module.timedelta(minutes=duration_minutes)
+
+    window_start = new_start - dt_module.timedelta(days=1)
+    window_end = new_end + dt_module.timedelta(days=1)
+
+    stmt = select(Appointment).where(
+        Appointment.assigned_to == advisor_id,
+        Appointment.appointment_date >= window_start,
+        Appointment.appointment_date <= window_end,
+        Appointment.status_id != 3  # Excluir canceladas
+    )
+    if exclude_appointment_id:
+        stmt = stmt.where(Appointment.appointment_id != exclude_appointment_id)
+
+    existing_appts = db.scalars(stmt).all()
+
+    for appt in existing_appts:
+        appt_start = appt.appointment_date
+        if appt_start.tzinfo is None:
+            appt_start = appt_start.replace(tzinfo=dt_module.timezone.utc)
+        else:
+            appt_start = appt_start.astimezone(dt_module.timezone.utc)
+
+        appt_duration = appt.duration_minutes if (appt.duration_minutes and appt.duration_minutes > 0) else 30
+        appt_end = appt_start + dt_module.timedelta(minutes=appt_duration)
+
+        # Condición estándar de solapamiento: (start_a < end_b) AND (end_a > start_b)
+        if (appt_start < new_end) and (appt_end > new_start):
+            return False
+
+    return True
+
+
+def get_least_busy_available_advisor(
+    start_dt: datetime,
+    duration_minutes: int,
+    company_id: Optional[int],
+    db: Session
+) -> Optional[int]:
+    """
+    Busca entre todos los asesores activos aquellos sin conflicto de horario,
+    y retorna el ID de aquel con menor cantidad de citas agendadas en ese mismo día (Least Busy).
+    """
+    query = select(Employee).where(Employee.is_active == True)
+    if company_id:
+        query = query.where(Employee.company_id == company_id)
+
+    # Filtrar asesores de servicio (position_id == 1)
+    advisors = db.scalars(query.where(Employee.position_id == 1)).all()
+    if not advisors:
+        advisors = db.scalars(query).all()
+
+    if not advisors:
+        return None
+
+    # Filtrar solo asesores libres
+    available_advisors = [
+        adv for adv in advisors
+        if check_advisor_availability(adv.employee_id, start_dt, duration_minutes, db)
+    ]
+
+    if not available_advisors:
+        return None
+
+    # Calcular rango del día en la zona horaria local de la empresa
+    local_tz = ZoneInfo("America/Mexico_City")
+    local_dt = start_dt.astimezone(local_tz) if start_dt.tzinfo else start_dt.replace(tzinfo=dt_module.timezone.utc).astimezone(local_tz)
+
+    day_start = datetime(local_dt.year, local_dt.month, local_dt.day, 0, 0, 0, tzinfo=local_tz).astimezone(dt_module.timezone.utc)
+    day_end = datetime(local_dt.year, local_dt.month, local_dt.day, 23, 59, 59, 999999, tzinfo=local_tz).astimezone(dt_module.timezone.utc)
+
+    advisor_counts = []
+    for adv in available_advisors:
+        count = db.scalar(
+            select(func.count(Appointment.appointment_id)).where(
+                Appointment.assigned_to == adv.employee_id,
+                Appointment.appointment_date >= day_start,
+                Appointment.appointment_date <= day_end,
+                Appointment.status_id != 3
+            )
+        ) or 0
+        advisor_counts.append((count, adv.employee_id))
+
+    # Ordenar por conteo de citas ascendente y luego por ID
+    advisor_counts.sort(key=lambda x: (x[0], x[1]))
+    return advisor_counts[0][1]
+
+
 router = APIRouter()
 
 @router.get("/", response_model=List[AppointmentResponse])
@@ -98,6 +210,7 @@ async def get_appointments(
         .options(
             joinedload(Appointment.status),
             joinedload(Appointment.reasons),
+            joinedload(Appointment.assignee),
             joinedload(Appointment.customer),  # Cargar la relación con el cliente
             joinedload(Appointment.vehicle)
                 .joinedload(Vehicle.color), # Cargar el color del vehículo
@@ -114,6 +227,92 @@ async def get_appointments(
     appointments = db.execute(stmt).scalars().unique().all()
     return appointments
 
+
+@router.get("/availability", response_model=List[TimeSlotAvailability])
+async def get_appointment_availability(
+    date: dt_module.date,
+    assigned_to: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Consulta la disponibilidad de horarios para una fecha dada y opcionalmente un asesor.
+    """
+    settings = db.query(CompanySettings).filter(CompanySettings.id == 1).first()
+
+    start_time = getattr(settings, 'appointment_start_time', None) or dt_module.time(8, 0)
+    end_time = getattr(settings, 'appointment_end_time', None) or dt_module.time(18, 0)
+    slot_duration = getattr(settings, 'slot_duration_minutes', 30) or 30
+    allowed_days = getattr(settings, 'allowed_days', [0, 1, 2, 3, 4, 5])
+    if allowed_days is None:
+        allowed_days = [0, 1, 2, 3, 4, 5]
+
+    local_tz = ZoneInfo("America/Mexico_City")
+    is_day_allowed = date.weekday() in allowed_days
+
+    # Lista de asesores de la empresa
+    all_advisors = []
+    if not assigned_to:
+        adv_query = select(Employee).where(
+            Employee.is_active == True,
+            Employee.company_id == current_user.company_id,
+            Employee.position_id == 1
+        )
+        all_advisors = db.scalars(adv_query).all()
+        if not all_advisors:
+            all_advisors = db.scalars(
+                select(Employee).where(
+                    Employee.is_active == True,
+                    Employee.company_id == current_user.company_id
+                )
+            ).all()
+
+    slots: List[TimeSlotAvailability] = []
+    current_min = start_time.hour * 60 + start_time.minute
+    end_min = end_time.hour * 60 + end_time.minute
+    now_utc = datetime.now(dt_module.timezone.utc)
+
+    while current_min < end_min:
+        h = current_min // 60
+        m = current_min % 60
+        slot_time = dt_module.time(h, m)
+        slot_str = slot_time.strftime("%H:%M")
+
+        slot_dt_local = datetime.combine(date, slot_time, tzinfo=local_tz)
+        slot_dt_utc = slot_dt_local.astimezone(dt_module.timezone.utc)
+
+        if not is_day_allowed or slot_dt_utc < now_utc:
+            slots.append(TimeSlotAvailability(
+                time_slot=slot_str,
+                is_available=False,
+                available_advisors_count=0
+            ))
+            current_min += slot_duration
+            continue
+
+        if assigned_to:
+            avail = check_advisor_availability(assigned_to, slot_dt_utc, slot_duration, db)
+            slots.append(TimeSlotAvailability(
+                time_slot=slot_str,
+                is_available=avail,
+                available_advisors_count=1 if avail else 0
+            ))
+        else:
+            avail_count = sum(
+                1 for adv in all_advisors
+                if check_advisor_availability(adv.employee_id, slot_dt_utc, slot_duration, db)
+            )
+            slots.append(TimeSlotAvailability(
+                time_slot=slot_str,
+                is_available=(avail_count > 0),
+                available_advisors_count=avail_count
+            ))
+
+        current_min += slot_duration
+
+    return slots
+
+
 @router.post("/new-appointment/", response_model=AppointmentResponse)
 async def create_appointment(
     appointment_data: AppointmentCreate,
@@ -122,7 +321,7 @@ async def create_appointment(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Crea una nueva cita en la base de datos.
+    Crea una nueva cita en la base de datos con persistencia de duración y validación de disponibilidad.
     """
     # Validación de fecha y hora futura
     now = datetime.now(dt_module.timezone.utc)
@@ -131,19 +330,22 @@ async def create_appointment(
         appt_date = appt_date.replace(tzinfo=dt_module.timezone.utc)
     else:
         appt_date = appt_date.astimezone(dt_module.timezone.utc)
-        
+
     if appt_date < now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se pueden agendar citas en el pasado."
         )
 
-    # Validación con la configuración de citas de la empresa
+    # 1. Configuración de citas y duración
     settings = db.query(CompanySettings).filter(CompanySettings.id == 1).first()
+    default_duration = getattr(settings, 'slot_duration_minutes', 30) or 30
+    duration_minutes = appointment_data.duration_minutes or default_duration
+
     if settings:
         local_tz = ZoneInfo("America/Mexico_City")
         local_appt = appt_date.astimezone(local_tz)
-        
+
         # Validar día de la semana (0=Lunes, ..., 6=Domingo)
         if settings.allowed_days is not None and isinstance(settings.allowed_days, list):
             if local_appt.weekday() not in settings.allowed_days:
@@ -151,7 +353,7 @@ async def create_appointment(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="El día seleccionado no está habilitado para agendar citas."
                 )
-        
+
         # Validar rango de horario
         appt_time = local_appt.time()
         if settings.appointment_start_time and appt_time < settings.appointment_start_time:
@@ -165,30 +367,62 @@ async def create_appointment(
                 detail=f"La hora de la cita debe ser anterior a las {settings.appointment_end_time.strftime('%H:%M')}."
             )
 
+    # 2. Validación de solapamiento y auto-asignación si aplica
+    final_assigned_to = appointment_data.assigned_to
+    if final_assigned_to:
+        if not check_advisor_availability(final_assigned_to, appt_date, duration_minutes, db):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El asesor seleccionado ya cuenta con una cita en ese horario."
+            )
+    else:
+        final_assigned_to = get_least_busy_available_advisor(
+            appt_date, duration_minutes, current_user.company_id, db
+        )
+        if not final_assigned_to:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No hay asesores disponibles en el horario seleccionado."
+            )
 
-    # 1. Extraer los datos y separar la lista de IDs de razones y flags de notificación
+    # 3. Extraer los datos y separar la lista de IDs de razones y flags de notificación
     data = appointment_data.model_dump()
     reason_ids = data.pop("reason_ids", [])
     send_whatsapp = data.pop("send_whatsapp", False)
     send_email = data.pop("send_email", False)
 
-    # 2. Crear la instancia de la cita (sin las razones todavía)
     new_appointment = Appointment(**data)
     new_appointment.company_id = current_user.company_id
+    new_appointment.duration_minutes = duration_minutes
+    new_appointment.assigned_to = final_assigned_to
 
-    # 3. Buscar las razones en la DB y asignarlas (SQLAlchemy maneja la tabla intermedia)
+    # 4. Buscar las razones en la DB y asignarlas
     if reason_ids:
         reasons = db.scalars(select(AppointmentReason).where(AppointmentReason.reason_id.in_(reason_ids))).all()
         new_appointment.reasons = reasons
 
     db.add(new_appointment)
     db.commit()
-    db.refresh(new_appointment)
+
+    # Recargar con relaciones
+    stmt_reload = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.status),
+            joinedload(Appointment.reasons),
+            joinedload(Appointment.assignee),
+            joinedload(Appointment.customer),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.color),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.model).joinedload(Model.make)
+        )
+        .where(Appointment.appointment_id == new_appointment.appointment_id)
+    )
+    reloaded_appointment = db.execute(stmt_reload).scalars().first()
 
     # Enviar notificaciones si se solicita
-    await notify_appointment_confirmation(new_appointment, send_whatsapp, send_email, db)
+    await notify_appointment_confirmation(reloaded_appointment, send_whatsapp, send_email, db)
 
-    return new_appointment
+    return reloaded_appointment
 
 @router.get("/reasons/", response_model=List[AppointmentReasonResponse])
 async def get_appointment_reasons(
@@ -366,6 +600,21 @@ async def reschedule_appointment(
             detail="No se pueden reprogramar citas en el pasado."
         )
 
+    # Validar disponibilidad del asesor asignado excluyendo la cita actual
+    if appointment.assigned_to:
+        duration = appointment.duration_minutes or 30
+        if not check_advisor_availability(
+            appointment.assigned_to,
+            appt_date,
+            duration,
+            db,
+            exclude_appointment_id=appointment.appointment_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El asesor ya cuenta con otra cita en el nuevo horario seleccionado."
+            )
+
     appointment.appointment_date = payload.appointment_date
     appointment.rescheduled_count = (appointment.rescheduled_count or 0) + 1
     
@@ -373,12 +622,25 @@ async def reschedule_appointment(
     appointment.status_id = 1
     
     db.commit()
-    db.refresh(appointment)
-    
+
+    stmt_reload = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.status),
+            joinedload(Appointment.reasons),
+            joinedload(Appointment.assignee),
+            joinedload(Appointment.customer),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.color),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.model).joinedload(Model.make)
+        )
+        .where(Appointment.appointment_id == appointment.appointment_id)
+    )
+    reloaded_appointment = db.execute(stmt_reload).scalars().first()
+
     # Enviar notificaciones si se solicita
-    await notify_appointment_confirmation(appointment, payload.send_whatsapp, payload.send_email, db)
+    await notify_appointment_confirmation(reloaded_appointment, payload.send_whatsapp, payload.send_email, db)
     
-    return appointment
+    return reloaded_appointment
 
 
 @router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
