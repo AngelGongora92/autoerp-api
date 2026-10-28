@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time, Text, func
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time, Text, func, Numeric
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, backref
@@ -159,6 +159,7 @@ class Order(Base):
     service_bay = Column(String(16), nullable = True)
     fuel_level = Column(Integer, nullable=True) # Nivel de combustible (ej: 1-8)
     has_extra_info = Column(Boolean, default=False)  # Indica si extra info es presente
+    appointment_id = Column(Integer, ForeignKey('appointments.appointment_id', ondelete='SET NULL'), nullable=True, index=True)
 
     # Relationships
     advisor = relationship("Employee", foreign_keys=[advisor_id], back_populates="advised_orders")
@@ -169,10 +170,32 @@ class Order(Base):
     op_status = relationship("OpStatus", back_populates="orders")
     adm_status = relationship("AdmStatus", back_populates="orders")
     priority = relationship("Priority", back_populates="orders")
+    appointment = relationship("Appointment", foreign_keys=[appointment_id])
     # La relación mantiene el nombre que prefieres.
     extra_info = relationship("OrderExtraInfo", back_populates="order", cascade="all, delete-orphan")
     bodywork_details = relationship("BodyworkDetails", back_populates="order", cascade="all, delete-orphan") # Relación uno a muchos
     inventory_data = relationship("OrderInventoryData", back_populates="order", cascade="all, delete-orphan")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+
+    order_item_id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey('orders.order_id', ondelete='CASCADE'), nullable=False, index=True)
+    reason_id = Column(Integer, ForeignKey('appointment_reasons.reason_id', ondelete='SET NULL'), nullable=True)
+    custom_description = Column(String(256), nullable=True)
+    notes = Column(Text, nullable=True)
+    priority_id = Column(Integer, ForeignKey('priority.priority_id', ondelete='SET NULL'), nullable=True)
+    quantity = Column(Numeric(10, 2), nullable=False, server_default='1.0', default=1.0)
+    unit_price = Column(Numeric(10, 2), nullable=True)
+    is_approved = Column(Boolean, nullable=True, server_default='false', default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    order = relationship('Order', back_populates='items')
+    reason = relationship('AppointmentReason')
+    priority = relationship('Priority')
 
 
 class OrderExtraInfo(Base):
@@ -372,6 +395,8 @@ class Appointment(Base):
     cancellation_reason = Column(String(256), nullable=True)
     cancellation_date = Column(TIMESTAMP(timezone=True), nullable=True)
     duration_minutes = Column(Integer, default=30, server_default='30', nullable=False)
+    order_id = Column(Integer, ForeignKey('orders.order_id', ondelete='SET NULL'), nullable=True, index=True)
+    channel = Column(String(32), server_default='manual', default='manual', nullable=True)
 
     company = relationship('Company')
 
@@ -392,6 +417,7 @@ class Appointment(Base):
     assignee = relationship("Employee", foreign_keys=[assigned_to])
     status = relationship("AppointmentStatus", foreign_keys=[status_id])
     items = relationship("AppointmentItem", back_populates="appointment", cascade="all, delete-orphan")
+    order = relationship("Order", foreign_keys=[order_id])
 
     @property
     def reasons(self):

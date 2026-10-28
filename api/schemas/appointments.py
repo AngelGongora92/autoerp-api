@@ -68,6 +68,8 @@ class AppointmentResponse(BaseModel):
     temp_email: Optional[str] = None
     temp_phone: Optional[str] = None
     temp_vehicle_data: Optional[Dict[str, Any]] = None
+    order_id: Optional[int] = None
+    channel: Optional[str] = 'manual'
     status: Optional["AppointmentStatusResponse"] = None
     items: List[AppointmentItemResponse] = []  # AUT-231: items con notas
     reasons: List["AppointmentReasonResponse"] = []  # Retrocompatibilidad

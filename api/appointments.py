@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentItem, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee
+from api.database import get_db, Appointment, AppointmentItem, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee, Order, OrderItem
 from api.auth_deps import get_current_user
 from .schemas.appointments import (
     AppointmentCreate,
@@ -16,6 +16,7 @@ from .schemas.appointments import (
     TimeSlotAvailability,
     AppointmentConfirmRequest,
 )
+from .schemas.orders import CreatedOrderFromAppointmentResponse
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
 from datetime import datetime
@@ -821,3 +822,130 @@ async def confirm_appointment(
             await notify_appointment_confirmation(reloaded_appointment, send_whatsapp, send_email, db)
 
     return reloaded_appointment
+
+
+def generate_next_c_order_id(company_id: int, db: Session) -> str:
+    stmt = (
+        select(Order.c_order_id)
+        .where(Order.company_id == company_id)
+        .order_by(Order.order_id.desc())
+    )
+    last_c_id = db.scalars(stmt).first()
+    if last_c_id:
+        import re
+        num_match = re.search(r'\d+', last_c_id)
+        if num_match:
+            next_num = int(num_match.group(0)) + 1
+            prefix = last_c_id[:num_match.start()]
+            padded = str(next_num).zfill(len(num_match.group(0)))
+            return f"{prefix}{padded}"
+        return f"{last_c_id}-1"
+    return "PW-1001"
+
+
+@router.post("/{appointment_id}/create-order", response_model=CreatedOrderFromAppointmentResponse, status_code=status.HTTP_201_CREATED)
+async def create_order_from_appointment(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Crea una Orden de Servicio a partir de una cita confirmada/programada y marca la cita como Atendida (id=4).
+    """
+    stmt = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason)
+        )
+        .where(
+            Appointment.appointment_id == appointment_id,
+            Appointment.company_id == current_user.company_id
+        )
+    )
+    appointment = db.execute(stmt).scalars().unique().first()
+    if not appointment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cita no encontrada o no pertenece a tu empresa"
+        )
+
+    # Validaciones de negocio
+    if appointment.status_id == 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede generar una orden de servicio a partir de una cita cancelada"
+        )
+
+    if appointment.order_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Esta cita ya fue convertida en la orden de servicio #{appointment.order_id}"
+        )
+
+    if not appointment.customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cita no cuenta con un cliente registrado formalmente. Completa el registro del cliente antes de generar la orden."
+        )
+
+    if not appointment.vehicle_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cita no cuenta con un vehículo registrado formalmente. Completa el registro del vehículo antes de generar la orden."
+        )
+
+    # 1. Generar nuevo c_order_id correlativo
+    c_order_id = generate_next_c_order_id(current_user.company_id, db)
+
+    # 2. Crear la Orden de Servicio
+    new_order = Order(
+        c_order_id=c_order_id,
+        order_date=datetime.utcnow(),
+        company_id=current_user.company_id,
+        customer_id=appointment.customer_id,
+        contact_id=appointment.contact_id,
+        vehicle_id=appointment.vehicle_id,
+        advisor_id=appointment.assigned_to,
+        appointment_id=appointment.appointment_id,
+        op_status_id=1,  # Recepción / Ingreso
+        adm_status_id=1,
+        priority_id=2,   # Normal / Media
+        fuel_level=4,    # Default medio tanque
+    )
+    db.add(new_order)
+    db.flush()
+
+    # 3. Transferir items de la cita a order_items
+    for app_item in (appointment.items or []):
+        order_item = OrderItem(
+            order_id=new_order.order_id,
+            reason_id=app_item.reason_id,
+            notes=app_item.notes,
+            priority_id=2,  # Normal / Media
+            quantity=1.0,
+            unit_price=None,
+            is_approved=False
+        )
+        db.add(order_item)
+
+    # 4. Actualizar estado de la cita a Atendida (id=4)
+    status_atendida = db.scalar(select(AppointmentStatus).where(AppointmentStatus.status_id == 4))
+    if not status_atendida:
+        status_atendida = AppointmentStatus(status_id=4, status="atendida")
+        db.add(status_atendida)
+        db.flush()
+
+    appointment.status_id = 4
+    appointment.order_id = new_order.order_id
+
+    db.commit()
+
+    # Recargar la orden con items para la respuesta
+    stmt_order = (
+        select(Order)
+        .options(joinedload(Order.items))
+        .where(Order.order_id == new_order.order_id)
+    )
+    final_order = db.execute(stmt_order).scalars().unique().first()
+
+    return final_order

@@ -64,6 +64,23 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
     *   `send_email` (Boolean, Opcional, default: false)
 *   **Salida (JSON):** `AppointmentResponse` con `status_id = 2`.
 
+### `POST /appointments/{appointment_id}/create-order`
+*   **Descripción:** Atiende una cita y genera una nueva Orden de Servicio (`orders`) vinculada con sus motivos/notas transferidos a `order_items` (AUT-40). Cambia el estado de la cita a 'atendida' (`status_id = 4`) y asocia `appointment.order_id` y `order.appointment_id`.
+*   **Tabla Fuente:** `appointments`, `orders`, `order_items`
+*   **Entrada (Path Params):**
+    *   `appointment_id` (Int, Requerido)
+*   **Salida (JSON - 201 Created):**
+    *   `order_id` (Int)
+    *   `c_order_id` (String): Folio correlativo autogenerado (ej. `PW-1002`).
+    *   `appointment_id` (Int): ID de la cita origen.
+    *   `customer_id` (Int)
+    *   `vehicle_id` (Int)
+    *   `advisor_id` (Int)
+    *   `op_status_id` (Int, default: 1)
+    *   `priority_id` (Int, default: 2)
+    *   `order_date` (Datetime)
+    *   `items` (List[Object]): Lista de items creados `[{ order_item_id, order_id, reason_id, notes, priority_id, quantity, unit_price, is_approved }]`.
+
 ---
 
 ## 🗓️ Horarios de Empleados (`/schedules`)
