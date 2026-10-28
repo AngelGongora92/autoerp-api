@@ -257,6 +257,19 @@ class CreateOrder(BaseModel):
     p_mileage: Optional[int] = None
     service_bay: Optional[str] = None
 
+class OrderItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    order_item_id: int
+    order_id: int
+    reason_id: Optional[int] = None
+    custom_description: Optional[str] = None
+    notes: Optional[str] = None
+    priority_id: Optional[int] = None
+    quantity: float = 1.0
+    unit_price: Optional[float] = None
+    is_approved: Optional[bool] = False
+    created_at: Optional[datetime] = None
+
 class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     order_id: int
@@ -267,6 +280,7 @@ class OrderResponse(BaseModel):
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
+    appointment_id: Optional[int] = None
     c_mileage: Optional[int] = None
     op_status_id: Optional[int] = None
     adm_status_id: Optional[int] = None
@@ -274,6 +288,7 @@ class OrderResponse(BaseModel):
     has_extra_info: Optional[bool] = None
     fuel_level: Optional[int] = None
     service_bay: Optional[str] = None
+    items: List[OrderItemResponse] = []
 
 class CustomerResponseShort(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -315,6 +330,7 @@ class OrderResponseNested(BaseModel):
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
+    appointment_id: Optional[int] = None
     c_mileage: Optional[int] = None
     op_status_id: Optional[int] = None
     adm_status_id: Optional[int] = None
@@ -326,6 +342,7 @@ class OrderResponseNested(BaseModel):
     vehicle: Optional[VehicleResponseShort] = None
     mechanic: Optional[EmployeeResponseShort] = None
     advisor: Optional[EmployeeResponseShort] = None
+    items: List[OrderItemResponse] = []
 
 class OrdersPaginatedResponse(BaseModel):
     orders: List[OrderResponseNested]
