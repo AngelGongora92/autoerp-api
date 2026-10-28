@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 from sqlalchemy import select, func
 from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee
 from api.auth_deps import get_current_user
@@ -195,16 +195,54 @@ def get_least_busy_available_advisor(
     return advisor_counts[0][1]
 
 
+def parse_date_param(val: Optional[Union[str, datetime, dt_module.date]], is_end: bool = False) -> Optional[datetime]:
+    if not val:
+        return None
+    local_tz = ZoneInfo("America/Mexico_City")
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            val = val.replace(tzinfo=local_tz)
+        return val
+    if isinstance(val, dt_module.date):
+        t = dt_module.time.max if is_end else dt_module.time.min
+        return datetime.combine(val, t, tzinfo=local_tz)
+    if isinstance(val, str):
+        val_str = val.strip()
+        if not val_str:
+            return None
+        # Formato ISO simple YYYY-MM-DD
+        if len(val_str) == 10 and val_str.count("-") == 2:
+            try:
+                d = dt_module.date.fromisoformat(val_str)
+                t = dt_module.time.max if is_end else dt_module.time.min
+                return datetime.combine(d, t, tzinfo=local_tz)
+            except Exception:
+                pass
+        try:
+            iso_clean = val_str.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso_clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=local_tz)
+            return dt
+        except Exception:
+            return None
+    return None
+
+
 router = APIRouter()
+
 
 @router.get("/", response_model=List[AppointmentResponse])
 async def get_appointments(
     assigned_to: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Obtiene citas. Si se envía 'assigned_to', filtra por empleado.
+    Obtiene citas del tenant. Si se envía 'assigned_to', filtra por empleado.
+    Si se envían 'start_date' y/o 'end_date', filtra por el rango de fechas (AUT-235).
     """
     stmt = (
         select(Appointment)
@@ -224,6 +262,16 @@ async def get_appointments(
 
     if assigned_to:
         stmt = stmt.where(Appointment.assigned_to == assigned_to)
+
+    start_dt = parse_date_param(start_date, is_end=False)
+    if start_dt:
+        stmt = stmt.where(Appointment.appointment_date >= start_dt)
+
+    end_dt = parse_date_param(end_date, is_end=True)
+    if end_dt:
+        stmt = stmt.where(Appointment.appointment_date <= end_dt)
+
+    stmt = stmt.order_by(Appointment.appointment_date.asc())
 
     appointments = db.execute(stmt).scalars().unique().all()
     return appointments
