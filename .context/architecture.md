@@ -494,6 +494,7 @@ appointments
 | Método | Ruta                | Auth | Descripción              |
 |--------|---------------------|------|--------------------------|
 | GET    | `/customers/`       | ✅   | Lista clientes del tenant|
+| GET    | `/customers/search` | ✅   | Búsqueda por nombre o teléfono |
 | POST   | `/customers/`       | ✅   | Crea cliente             |
 | GET    | `/customers/{id}`   | ✅   | Obtiene cliente por ID   |
 | PATCH  | `/customers/{id}`   | ✅   | Actualiza cliente        |

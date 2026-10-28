@@ -271,11 +271,13 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 ## 👥 Clientes (`/customers`)
 
 ### `GET /customers/search`
-*   **Descripción:** Buscar clientes por nombre o empresa.
-*   **Tabla Fuente:** `customers`
-*   **Entrada (Query Param):**
-    *   `full_name` (String): Texto a buscar.
-*   **Salida:** Lista de clientes coincidentes.
+*   **Descripción:** Buscar clientes por nombre completo, empresa o número de teléfono (Customer.phone y Contact.phone). (AUT-228)
+*   **Tabla Fuente:** `customers`, `contacts`
+*   **Entrada (Query Params):**
+    *   `q` (String, opcional): Término unificado de búsqueda (nombre o teléfono).
+    *   `full_name` (String, opcional): Parámetro alternativo compatible.
+    *   `limit` (Int, opcional, default=10): Límite de resultados.
+*   **Salida (List[CustomerSearchResponse]):** Lista de clientes coincidentes.
 
 ### `POST /customers/`
 *   **Descripción:** Crear cliente.
