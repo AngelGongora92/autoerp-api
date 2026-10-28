@@ -52,6 +52,14 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
     *   `reason` (String)
     *   `duration_minutes` (Int): Duración estimada en minutos.
 
+### `PATCH /appointments/{appointment_id}/confirm`
+*   **Descripción:** Confirma manualmente una cita existente por parte del asesor (AUT-234), cambiando su estado a 'confirmado' (`status_id = 2`) y enviando opcionalmente confirmación al cliente por WhatsApp y/o correo.
+*   **Tabla Fuente:** `appointments`
+*   **Entrada (Body JSON):**
+    *   `send_whatsapp` (Boolean, Opcional, default: false)
+    *   `send_email` (Boolean, Opcional, default: false)
+*   **Salida (JSON):** `AppointmentResponse` con `status_id = 2`.
+
 ---
 
 ## 🗓️ Horarios de Empleados (`/schedules`)

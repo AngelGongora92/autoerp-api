@@ -580,6 +580,7 @@ appointments
 | GET    | `/appointments/public/{id}`               | ❌   | Detalles públicos de la cita              |
 | POST   | `/appointments/public/{id}/confirm`       | ❌   | Confirmación pública de la cita           |
 | POST   | `/appointments/public/{id}/cancel`        | ❌   | Cancelación pública de la cita            |
+| PATCH  | `/appointments/{id}/confirm`              | ✅   | Confirmar cita manualmente (asesor)       |
 | PATCH  | `/appointments/{id}/reschedule`           | ✅   | Reprogramar cita                          |
 | PATCH  | `/appointments/{id}/cancel`               | ✅   | Cancelar cita (panel interno)             |
 | POST   | `/appointments/{id}/resend-confirmation`  | ✅   | Reenviar notificación de confirmación     |
