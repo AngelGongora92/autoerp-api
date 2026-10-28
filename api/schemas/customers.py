@@ -24,6 +24,9 @@ class CustomerResponse(BaseModel):
     phone: Optional[str] = None
     is_active: bool
 
+class CustomerSearchResponse(CustomerResponse):
+    pass
+
 class CustomerUpdate(BaseModel):
     model_config = ConfigDict(extra='ignore')
     is_company: Optional[bool] = None

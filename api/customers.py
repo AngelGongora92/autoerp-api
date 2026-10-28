@@ -1,10 +1,17 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select, func
-from typing import List
+from sqlalchemy import select, func, or_
+from typing import List, Optional
 
 # Importar las clases de Pydantic desde su nuevo archivo
-from .schemas.user import CustomerResponse, CustomerUpdate, CustomerCreate, ContactResponse
+from .schemas.user import (
+    CustomerResponse,
+    CustomerSearchResponse,
+    CustomerUpdate,
+    CustomerCreate,
+    ContactResponse
+)
 
 # Reutilizamos la dependencia get_db y los modelos
 from .database import User, Permission, Customer, get_db, Contact
@@ -27,31 +34,62 @@ async def get_all_customers(
     return customers
 
 
-@router.get("/search", response_model=List[CustomerResponse])
-async def search_customers_by_name(
-    full_name: str,
+@router.get("/search", response_model=List[CustomerSearchResponse])
+async def search_customers(
+    q: Optional[str] = None,
+    full_name: Optional[str] = None,
+    limit: int = 10,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Busca clientes por nombre completo (concatenando fname y lname) o por nombre de compañía.
+    Busca clientes por nombre completo (fname, lname), nombre de compañía (cname),
+    correo electrónico o número de teléfono (Customer.phone o Contact.phone).
+    Soporta búsqueda parcial mediante el parámetro `q` o `full_name`. (AUT-228)
     """
-    search_term = f"%{full_name.lower()}%"
-    
-    # Concatenamos fname y lname para buscar el nombre completo en una sola cadena.
-    # Esto permite búsquedas como "Angel Gongora" aunque estén en campos separados.
+    search_query = (q or full_name or "").strip()
+    if not search_query or len(search_query) < 2:
+        return []
+
+    search_term = f"%{search_query.lower()}%"
+    clean_digits = re.sub(r"\D", "", search_query)
+
+    # Concatenamos fname y lname para buscar el nombre completo en una sola cadena
     full_name_db = func.concat(Customer.fname, ' ', Customer.lname)
-    
-    # Construir la consulta para buscar en el nombre completo concatenado o en el nombre de la compañía, filtrado por empresa
-    stmt = select(Customer).where(
-        Customer.company_id == current_user.company_id,
-        (full_name_db.ilike(search_term)) |
-        (Customer.cname.ilike(search_term))
+
+    conditions = [
+        full_name_db.ilike(search_term),
+        Customer.cname.ilike(search_term),
+        Customer.fname.ilike(search_term),
+        Customer.lname.ilike(search_term),
+        Customer.email.ilike(search_term),
+        Customer.phone.ilike(search_term),
+        Customer.contacts.any(Contact.phone.ilike(search_term)),
+        Customer.contacts.any(func.concat(Contact.fname, ' ', Contact.lname).ilike(search_term)),
+    ]
+
+    # Búsqueda numérica flexible en teléfonos si el término contiene dígitos (ej. "551234", "123-456")
+    if clean_digits and len(clean_digits) >= 3:
+        digits_term = f"%{clean_digits}%"
+        # Normalizar la columna removiendo espacios, guiones, +, paréntesis
+        clean_cust_phone = func.replace(func.replace(func.replace(func.replace(func.replace(Customer.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')
+        clean_contact_phone = func.replace(func.replace(func.replace(func.replace(func.replace(Contact.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')
+        
+        conditions.append(Customer.phone.ilike(digits_term))
+        conditions.append(clean_cust_phone.ilike(digits_term))
+        conditions.append(Customer.contacts.any(Contact.phone.ilike(digits_term)))
+        conditions.append(Customer.contacts.any(clean_contact_phone.ilike(digits_term)))
+
+    stmt = (
+        select(Customer)
+        .where(
+            Customer.company_id == current_user.company_id,
+            or_(*conditions)
+        )
+        .limit(max(1, min(limit, 50)))
     )
-    
+
     customers = db.scalars(stmt).unique().all()
-    
-    # Nota: Si no se encuentran clientes, se devuelve una lista vacía [], que es la respuesta correcta para una búsqueda sin resultados.
     return customers
 
 
