@@ -12,6 +12,7 @@ from .schemas.appointments import (
     AppointmentReasonCreate,
     AppointmentReasonUpdate,
     TimeSlotAvailability,
+    AppointmentConfirmRequest,
 )
 from sqlalchemy.orm import joinedload, Session
 from api.notifications import send_whatsapp_confirmation, send_email_confirmation_brevo
@@ -690,3 +691,72 @@ async def resend_appointment_confirmation(
         
     await notify_appointment_confirmation(appointment, payload.send_whatsapp, payload.send_email, db)
     return {"status": "ok", "message": "Confirmación reenviada correctamente"}
+
+
+@router.patch("/{appointment_id}/confirm", response_model=AppointmentResponse)
+async def confirm_appointment(
+    appointment_id: int,
+    payload: Optional[AppointmentConfirmRequest] = None,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Confirma manualmente una cita existente por parte del asesor (AUT-234),
+    cambiando su estado a 'confirmado' (status_id = 2) y enviando opcionalmente
+    las notificaciones solicitadas por WhatsApp o correo.
+    """
+    appointment = db.scalar(select(Appointment).where(
+        Appointment.appointment_id == appointment_id,
+        Appointment.company_id == current_user.company_id
+    ))
+    if not appointment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cita no encontrada o acceso denegado")
+
+    if appointment.status_id == 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede confirmar una cita que ha sido cancelada."
+        )
+
+    if appointment.status_id == 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cita ya se encuentra confirmada."
+        )
+
+    # Verificar si existe el estado 2 (confirmado) en la base de datos
+    status_confirmed = db.scalar(select(AppointmentStatus).where(AppointmentStatus.status_id == 2))
+    if not status_confirmed:
+        status_confirmed = AppointmentStatus(status_id=2, status="confirmado")
+        db.add(status_confirmed)
+        db.flush()
+
+    appointment.status_id = 2  # Confirmada
+    db.commit()
+
+    # Recargar cita con relaciones cargadas para la respuesta
+    stmt_reload = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.status),
+            joinedload(Appointment.reasons),
+            joinedload(Appointment.assignee),
+            joinedload(Appointment.customer),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.color),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.model).joinedload(Model.make)
+        )
+        .where(Appointment.appointment_id == appointment.appointment_id)
+    )
+    reloaded_appointment = db.execute(stmt_reload).scalars().first()
+
+    send_whatsapp = payload.send_whatsapp if payload else False
+    send_email = payload.send_email if payload else False
+
+    if send_whatsapp or send_email:
+        if background_tasks:
+            background_tasks.add_task(notify_appointment_confirmation, reloaded_appointment, send_whatsapp, send_email, db)
+        else:
+            await notify_appointment_confirmation(reloaded_appointment, send_whatsapp, send_email, db)
+
+    return reloaded_appointment
