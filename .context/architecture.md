@@ -575,7 +575,7 @@ appointments
 #### `/appointments` — Citas
 | Método | Ruta                                      | Auth | Descripción                               |
 |--------|-------------------------------------------|------|-------------------------------------------|
-| GET    | `/appointments/`                          | ✅   | Lista citas del tenant (filtro por asignado)|
+| GET    | `/appointments/`                          | ✅   | Lista citas del tenant (filtro por asignado y rango de fechas)|
 | POST   | `/appointments/new-appointment/`          | ✅   | Crea cita + notificaciones opcionales     |
 | GET    | `/appointments/reasons/`                  | ❌   | Lista razones de cita                     |
 | GET    | `/appointments/public/{id}`               | ❌   | Detalles públicos de la cita              |

@@ -25,6 +25,8 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 *   **Tabla Fuente:** `appointments`
 *   **Entrada (Query Params):**
     *   `assigned_to` (Int, Opcional): ID del empleado para filtrar sus citas.
+    *   `start_date` (String/Date/Datetime, Opcional): Fecha de inicio del rango (ej. `YYYY-MM-DD` o ISO datetime).
+    *   `end_date` (String/Date/Datetime, Opcional): Fecha de fin del rango (ej. `YYYY-MM-DD` o ISO datetime). Las citas se devuelven ordenadas cronológicamente (`appointment_date.asc()`).
 *   **Salida (List[JSON]):**
     *   `appointment_id` (Int)
     *   `appointment_date` (Datetime): Fecha y hora de inicio.
