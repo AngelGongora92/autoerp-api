@@ -7,6 +7,18 @@ from .vehicles import VehicleInfoForAppointment
 from .user import EmployeeResponseShort
 
 
+class AppointmentItemCreate(BaseModel):
+    reason_id: int
+    notes: Optional[str] = None
+
+class AppointmentItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    appointment_item_id: int
+    reason_id: Optional[int] = None
+    notes: Optional[str] = None
+    reason: Optional["AppointmentReasonResponse"] = None
+
+
 class AppointmentCreate(BaseModel):
     # IDs para cuando la cita la crea un empleado para un cliente existente
     customer_id: Optional[int] = None
@@ -25,7 +37,8 @@ class AppointmentCreate(BaseModel):
 
     appointment_date: datetime
     duration_minutes: Optional[int] = None
-    reason_ids: List[int]
+    reason_ids: Optional[List[int]] = None  # Deprecated (Legacy Support)
+    items: Optional[List[AppointmentItemCreate]] = None  # AUT-231: items con notas individuales
     status_id: int
     notes: Optional[str] = None
     send_whatsapp: Optional[bool] = False
@@ -56,7 +69,8 @@ class AppointmentResponse(BaseModel):
     temp_phone: Optional[str] = None
     temp_vehicle_data: Optional[Dict[str, Any]] = None
     status: Optional["AppointmentStatusResponse"] = None
-    reasons: List["AppointmentReasonResponse"] = []
+    items: List[AppointmentItemResponse] = []  # AUT-231: items con notas
+    reasons: List["AppointmentReasonResponse"] = []  # Retrocompatibilidad
     customer: Optional[CustomerInfoForAppointment] = None
     vehicle: Optional[VehicleInfoForAppointment] = None
     assignee: Optional[EmployeeResponseShort] = None

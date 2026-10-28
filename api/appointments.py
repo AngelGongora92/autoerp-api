@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee
+from api.database import get_db, Appointment, AppointmentItem, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee
 from api.auth_deps import get_current_user
 from .schemas.appointments import (
     AppointmentCreate,
@@ -11,6 +11,8 @@ from .schemas.appointments import (
     AppointmentReasonResponse,
     AppointmentReasonCreate,
     AppointmentReasonUpdate,
+    AppointmentItemCreate,
+    AppointmentItemResponse,
     TimeSlotAvailability,
     AppointmentConfirmRequest,
 )
@@ -248,7 +250,7 @@ async def get_appointments(
         select(Appointment)
         .options(
             joinedload(Appointment.status),
-            joinedload(Appointment.reasons),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
             joinedload(Appointment.assignee),
             joinedload(Appointment.customer),  # Cargar la relación con el cliente
             joinedload(Appointment.vehicle)
@@ -434,9 +436,10 @@ async def create_appointment(
                 detail="No hay asesores disponibles en el horario seleccionado."
             )
 
-    # 3. Extraer los datos y separar la lista de IDs de razones y flags de notificación
+    # 3. Extraer los datos y separar la lista de items/razones y flags de notificación
     data = appointment_data.model_dump()
-    reason_ids = data.pop("reason_ids", [])
+    reason_ids = data.pop("reason_ids", None)
+    items_input = data.pop("items", None)
     send_whatsapp = data.pop("send_whatsapp", False)
     send_email = data.pop("send_email", False)
 
@@ -445,10 +448,20 @@ async def create_appointment(
     new_appointment.duration_minutes = duration_minutes
     new_appointment.assigned_to = final_assigned_to
 
-    # 4. Buscar las razones en la DB y asignarlas
-    if reason_ids:
-        reasons = db.scalars(select(AppointmentReason).where(AppointmentReason.reason_id.in_(reason_ids))).all()
-        new_appointment.reasons = reasons
+    # 4. Crear los items de la cita (AUT-231)
+    appointment_items_to_add = []
+    if items_input:
+        for itm in items_input:
+            r_id = itm.get("reason_id") if isinstance(itm, dict) else getattr(itm, "reason_id", None)
+            nts = itm.get("notes") if isinstance(itm, dict) else getattr(itm, "notes", None)
+            if isinstance(nts, str):
+                nts = nts.strip() or None
+            appointment_items_to_add.append(AppointmentItem(reason_id=r_id, notes=nts))
+    elif reason_ids:
+        for r_id in reason_ids:
+            appointment_items_to_add.append(AppointmentItem(reason_id=r_id, notes=None))
+
+    new_appointment.items = appointment_items_to_add
 
     db.add(new_appointment)
     db.commit()
@@ -458,7 +471,7 @@ async def create_appointment(
         select(Appointment)
         .options(
             joinedload(Appointment.status),
-            joinedload(Appointment.reasons),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
             joinedload(Appointment.assignee),
             joinedload(Appointment.customer),
             joinedload(Appointment.vehicle).joinedload(Vehicle.color),
@@ -567,7 +580,7 @@ async def get_public_appointment(
         select(Appointment)
         .options(
             joinedload(Appointment.status),
-            joinedload(Appointment.reasons),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
             joinedload(Appointment.customer),
             joinedload(Appointment.vehicle)
                 .joinedload(Vehicle.color),
@@ -676,7 +689,7 @@ async def reschedule_appointment(
         select(Appointment)
         .options(
             joinedload(Appointment.status),
-            joinedload(Appointment.reasons),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
             joinedload(Appointment.assignee),
             joinedload(Appointment.customer),
             joinedload(Appointment.vehicle).joinedload(Vehicle.color),
@@ -788,7 +801,7 @@ async def confirm_appointment(
         select(Appointment)
         .options(
             joinedload(Appointment.status),
-            joinedload(Appointment.reasons),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
             joinedload(Appointment.assignee),
             joinedload(Appointment.customer),
             joinedload(Appointment.vehicle).joinedload(Vehicle.color),

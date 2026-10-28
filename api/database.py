@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Table, ForeignKey, Date, TIMESTAMP, Enum, Float, UniqueConstraint, Time, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, backref
@@ -343,11 +343,17 @@ class OrderInventoryData(Base):
     __table_args__ = (UniqueConstraint('order_id', 'item_id', name='_order_item_uc'),)
 
 
-# --- Tabla de asociación para Citas y Razones (Muchos a Muchos) ---
-appointment_reasons_link = Table('appointment_reasons_link', Base.metadata,
-    Column('appointment_id', Integer, ForeignKey('appointments.appointment_id', ondelete='CASCADE'), primary_key=True),
-    Column('reason_id', Integer, ForeignKey('appointment_reasons.reason_id'), primary_key=True)
-)
+class AppointmentItem(Base):
+    __tablename__ = 'appointment_items'
+
+    appointment_item_id = Column(Integer, primary_key=True, index=True)
+    appointment_id = Column(Integer, ForeignKey('appointments.appointment_id', ondelete='CASCADE'), nullable=False, index=True)
+    reason_id = Column(Integer, ForeignKey('appointment_reasons.reason_id', ondelete='SET NULL'), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    appointment = relationship('Appointment', back_populates='items')
+    reason = relationship('AppointmentReason', back_populates='appointment_items')
 
 
 class Appointment(Base):
@@ -385,7 +391,12 @@ class Appointment(Base):
     scheduler = relationship("Employee", foreign_keys=[scheduled_by])
     assignee = relationship("Employee", foreign_keys=[assigned_to])
     status = relationship("AppointmentStatus", foreign_keys=[status_id])
-    reasons = relationship("AppointmentReason", secondary=appointment_reasons_link, back_populates="appointments")
+    items = relationship("AppointmentItem", back_populates="appointment", cascade="all, delete-orphan")
+
+    @property
+    def reasons(self):
+        """Propiedad retrocompatible para acceder a los motivos asociados a la cita."""
+        return [item.reason for item in self.items if item.reason is not None]
 
     
 class AppointmentStatus(Base):
@@ -399,8 +410,7 @@ class AppointmentReason(Base):
     reason = Column(String(128), unique=True, nullable=False)  # e.g., Maintenance, Repair, Inspection
     duration_minutes = Column(Integer, default=60, server_default='60', nullable=False) # Duración estimada en minutos
 
-    # Relación inversa para poder ver todas las citas de una razón
-    appointments = relationship("Appointment", secondary=appointment_reasons_link, back_populates="reasons")
+    appointment_items = relationship("AppointmentItem", back_populates="reason")
 
 # --- Modelos para Horarios de Empleados ---
 

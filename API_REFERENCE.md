@@ -30,7 +30,8 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 *   **Salida (List[JSON]):**
     *   `appointment_id` (Int)
     *   `appointment_date` (Datetime): Fecha y hora de inicio.
-    *   `reason` (Object): `{ reason: String, duration_minutes: Int }` (Viene de `appointment_reasons`).
+    *   `items` (List[Object]): Lista de items de la cita `[{ appointment_item_id, reason_id, notes, reason }]` (AUT-231).
+    *   `reasons` (List[Object]): Lista legacy de motivos `{ reason_id, reason, duration_minutes }`.
     *   `status` (Object): `{ status: String }` (Viene de `appointment_status`).
     *   `customer` (Object): Datos básicos del cliente.
     *   `vehicle` (Object): Datos básicos del vehículo.
@@ -38,10 +39,11 @@ Este documento detalla los endpoints disponibles para el equipo de Frontend, esp
 
 ### `POST /appointments/new-appointment/`
 *   **Descripción:** Crea una nueva cita.
-*   **Tabla Fuente:** `appointments`
+*   **Tabla Fuente:** `appointments`, `appointment_items`
 *   **Entrada (Body JSON):**
     *   `appointment_date` (Datetime): Fecha y hora.
-    *   `reason_id` (Int): ID del motivo.
+    *   `items` (List[Object], Opcional): Items con notas individuales `[{ "reason_id": Int, "notes": String }]` (AUT-231).
+    *   `reason_ids` (List[Int], Opcional): Lista legacy de IDs de motivos (retrocompatible).
     *   `assigned_to` (Int, Opcional): ID del mecánico/asesor.
     *   `customer_id` / `vehicle_id` (Int, Opcional): IDs si ya existen.
     *   `temp_fname`, `temp_phone`, etc. (String, Opcional): Datos si es cliente nuevo/rápido.
