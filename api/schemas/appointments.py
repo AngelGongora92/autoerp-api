@@ -31,6 +31,10 @@ class AppointmentCreate(BaseModel):
     send_whatsapp: Optional[bool] = False
     send_email: Optional[bool] = False
 
+class AppointmentConfirmRequest(BaseModel):
+    send_whatsapp: bool = False
+    send_email: bool = False
+
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     appointment_id: int
