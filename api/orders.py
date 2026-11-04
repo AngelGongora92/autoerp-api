@@ -3,10 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import select, func
 import math
-from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData, User, Vehicle, Model, Customer
+from .database import get_db, Order, OrderExtraItems, OrderExtraInfo, BodyworkDetailTypes, BodyworkDetails, OrderInventoryData, User, Vehicle, Model, Customer, Appointment, AppointmentStatus, OrderItem, InventoryTypes, InventoryItems
 from sqlalchemy.orm import joinedload
 from .schemas.user import CreateOrder, OrderResponse, OrderUpdate, OrderExtraItemsResponse, OrderExtraInfoCreate, OrderExtraInfoResponse, BodyworkDetailTypesResponse, BodyworkDetailTypesCreate, BodyworkDetailsResponse, BodyworkDetailsCreate, BodyworkDetailTypesUpdate, BodyworkDetailsUpdate, InventoryTypesResponse, InventoryTypesCreate, InventoryItemsCreate, InventoryItemsResponse, InventoryItemsByTypeResponse, InventoryItemReorder, OrderInventoryDataCreate, OrderInventoryDataResponse, InventoryTypesReorder, InventoryTypesUpdate, InventoryItemsUpdate, OrdersPaginatedResponse
-from .database import InventoryTypes, InventoryItems, OrderInventoryData
 from api.auth_deps import get_current_user
 
 router = APIRouter()
@@ -21,17 +20,66 @@ async def create_order(
 ):
     """
     Crea una nueva orden en la base de datos.
+    Si se proporciona appointment_id, asocia la cita, la marca como 'atendida' (status_id=4)
+    y traslada los items de la cita a order_items.
     """
-    # Convierte el objeto de Pydantic a un diccionario. Esto incluirá todos
     order_dict = order_data.model_dump()
+    appointment_id = order_dict.get("appointment_id")
 
-    # Crea una nueva instancia de la clase de la base de datos
-    # usando el diccionario. Esto garantiza que todos los campos
-    # de Pydantic se asignen correctamente.
+    appointment = None
+    if appointment_id:
+        appointment = db.scalar(
+            select(Appointment).where(
+                Appointment.appointment_id == appointment_id,
+                Appointment.company_id == current_user.company_id,
+            )
+        )
+        if not appointment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cita no encontrada o no pertenece a la empresa.",
+            )
+
     new_order = Order(**order_dict)
     new_order.company_id = current_user.company_id
 
     db.add(new_order)
+    db.flush()
+
+    if appointment:
+        # 1. Asegurar status 'atendida'
+        attended_status = db.scalar(
+            select(AppointmentStatus).where(
+                func.lower(AppointmentStatus.status).in_(["atendida", "atendido"])
+            )
+        )
+        if not attended_status:
+            attended_status = db.scalar(
+                select(AppointmentStatus).where(AppointmentStatus.status_id == 4)
+            )
+        if not attended_status:
+            attended_status = AppointmentStatus(status_id=4, status="atendida")
+            db.add(attended_status)
+            db.flush()
+
+        appointment.status_id = attended_status.status_id
+        appointment.order_id = new_order.order_id
+
+        # 2. Copiar items de la cita a order_items si no existen items previos
+        if appointment.items:
+            for item in appointment.items:
+                order_item = OrderItem(
+                    order_id=new_order.order_id,
+                    reason_id=item.reason_id,
+                    custom_description=None,
+                    notes=item.notes,
+                    priority_id=new_order.priority_id or 2,
+                    quantity=1.0,
+                    unit_price=0.0,
+                    is_approved=False,
+                )
+                db.add(order_item)
+
     db.commit()
     db.refresh(new_order)
 
