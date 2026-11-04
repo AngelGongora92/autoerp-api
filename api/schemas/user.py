@@ -249,6 +249,7 @@ class CreateOrder(BaseModel):
     customer_id: Optional[int] = None
     contact_id: Optional[int] = None
     vehicle_id: Optional[int] = None
+    appointment_id: Optional[int] = None
     adm_status_id: Optional[int] = 1
     op_status_id: Optional[int] = 1
     priority_id: Optional[int] = 1
@@ -371,6 +372,7 @@ class OrderUpdate(BaseModel):
     has_extra_info: Optional[bool] = None
     fuel_level: Optional[int] = None
     service_bay: Optional[str] = None
+    appointment_id: Optional[int] = None
 
 class OrderExtraItemsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

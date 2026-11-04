@@ -635,6 +635,41 @@ async def cancel_public_appointment(
     return {"message": "Cita cancelada exitosamente"}
 
 
+@router.get("/{appointment_id}", response_model=AppointmentResponse)
+async def get_appointment_by_id(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Obtiene los detalles completos de una cita para el usuario/empresa autenticado.
+    """
+    stmt = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.status),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
+            joinedload(Appointment.customer),
+            joinedload(Appointment.vehicle)
+                .joinedload(Vehicle.color),
+            joinedload(Appointment.vehicle)
+                .joinedload(Vehicle.model)
+                .joinedload(Model.make)
+        )
+        .where(
+            Appointment.appointment_id == appointment_id,
+            Appointment.company_id == current_user.company_id,
+        )
+    )
+    appointment = db.execute(stmt).scalars().unique().first()
+    if not appointment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cita no encontrada o no pertenece a la empresa.",
+        )
+    return appointment
+
+
 @router.patch("/{appointment_id}/reschedule", response_model=AppointmentResponse)
 async def reschedule_appointment(
     appointment_id: int,
