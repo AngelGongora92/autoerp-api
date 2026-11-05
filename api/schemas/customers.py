@@ -55,9 +55,12 @@ class ContactResponse(BaseModel):
     email: str
     phone: Optional[str] = None
 
-# Esquema simplificado para mostrar la información del cliente en la cita
+# Esquema para mostrar la información del cliente en la cita
 class CustomerInfoForAppointment(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    customer_id: Optional[int] = None
     fname: Optional[str] = None
     lname: Optional[str] = None
     cname: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None

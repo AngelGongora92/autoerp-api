@@ -38,6 +38,8 @@ async def get_all_customers(
 async def search_customers(
     q: Optional[str] = None,
     full_name: Optional[str] = None,
+    name: Optional[str] = None,
+    phone: Optional[str] = None,
     limit: int = 10,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -45,40 +47,47 @@ async def search_customers(
     """
     Busca clientes por nombre completo (fname, lname), nombre de compañía (cname),
     correo electrónico o número de teléfono (Customer.phone o Contact.phone).
-    Soporta búsqueda parcial mediante el parámetro `q` o `full_name`. (AUT-228)
+    Soporta búsqueda combinada o específica mediante `q`, `full_name`, `name` y `phone`. (AUT-228, AUT-242)
     """
-    search_query = (q or full_name or "").strip()
-    if not search_query or len(search_query) < 2:
-        return []
+    conditions = []
 
-    search_term = f"%{search_query.lower()}%"
-    clean_digits = re.sub(r"\D", "", search_query)
+    # 1. Búsqueda por término de texto o nombre
+    name_term_str = (name or full_name or q or "").strip()
+    if name_term_str and len(name_term_str) >= 2:
+        search_term = f"%{name_term_str.lower()}%"
+        full_name_db = func.concat(Customer.fname, ' ', Customer.lname)
+        conditions.extend([
+            full_name_db.ilike(search_term),
+            Customer.cname.ilike(search_term),
+            Customer.fname.ilike(search_term),
+            Customer.lname.ilike(search_term),
+            Customer.email.ilike(search_term),
+            Customer.contacts.any(func.concat(Contact.fname, ' ', Contact.lname).ilike(search_term)),
+        ])
 
-    # Concatenamos fname y lname para buscar el nombre completo en una sola cadena
-    full_name_db = func.concat(Customer.fname, ' ', Customer.lname)
-
-    conditions = [
-        full_name_db.ilike(search_term),
-        Customer.cname.ilike(search_term),
-        Customer.fname.ilike(search_term),
-        Customer.lname.ilike(search_term),
-        Customer.email.ilike(search_term),
-        Customer.phone.ilike(search_term),
-        Customer.contacts.any(Contact.phone.ilike(search_term)),
-        Customer.contacts.any(func.concat(Contact.fname, ' ', Contact.lname).ilike(search_term)),
-    ]
-
-    # Búsqueda numérica flexible en teléfonos si el término contiene dígitos (ej. "551234", "123-456")
+    # 2. Búsqueda numérica flexible en teléfonos
+    phone_input = (phone or (q if not name else "")).strip()
+    clean_digits = re.sub(r"\D", "", phone_input)
     if clean_digits and len(clean_digits) >= 3:
         digits_term = f"%{clean_digits}%"
-        # Normalizar la columna removiendo espacios, guiones, +, paréntesis
         clean_cust_phone = func.replace(func.replace(func.replace(func.replace(func.replace(Customer.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')
         clean_contact_phone = func.replace(func.replace(func.replace(func.replace(func.replace(Contact.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')
-        
-        conditions.append(Customer.phone.ilike(digits_term))
-        conditions.append(clean_cust_phone.ilike(digits_term))
-        conditions.append(Customer.contacts.any(Contact.phone.ilike(digits_term)))
-        conditions.append(Customer.contacts.any(clean_contact_phone.ilike(digits_term)))
+
+        conditions.extend([
+            Customer.phone.ilike(digits_term),
+            clean_cust_phone.ilike(digits_term),
+            Customer.contacts.any(Contact.phone.ilike(digits_term)),
+            Customer.contacts.any(clean_contact_phone.ilike(digits_term)),
+        ])
+    elif phone_input and len(phone_input) >= 3:
+        p_term = f"%{phone_input.lower()}%"
+        conditions.extend([
+            Customer.phone.ilike(p_term),
+            Customer.contacts.any(Contact.phone.ilike(p_term)),
+        ])
+
+    if not conditions:
+        return []
 
     stmt = (
         select(Customer)

@@ -65,6 +65,12 @@ async def create_order(
         appointment.status_id = attended_status.status_id
         appointment.order_id = new_order.order_id
 
+        # Si la cita era temporal, asegurar que se sincronicen customer_id y vehicle_id
+        if not appointment.customer_id and new_order.customer_id:
+            appointment.customer_id = new_order.customer_id
+        if not appointment.vehicle_id and new_order.vehicle_id:
+            appointment.vehicle_id = new_order.vehicle_id
+
         # 2. Copiar items de la cita a order_items si no existen items previos
         if appointment.items:
             for item in appointment.items:

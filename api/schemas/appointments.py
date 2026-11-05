@@ -48,6 +48,10 @@ class AppointmentConfirmRequest(BaseModel):
     send_whatsapp: bool = False
     send_email: bool = False
 
+class AppointmentFormalize(BaseModel):
+    customer_id: int
+    vehicle_id: int
+
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     appointment_id: int
