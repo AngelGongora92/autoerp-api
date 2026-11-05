@@ -733,6 +733,13 @@ async def reschedule_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Cita no encontrada o acceso denegado")
 
+    # Validación de estado: no se pueden reprogramar citas canceladas (3) ni atendidas (4)
+    if appointment.status_id in [3, 4]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede reprogramar una cita cancelada o atendida."
+        )
+
     # Validación de fecha y hora futura
     now = datetime.now(dt_module.timezone.utc)
     appt_date = payload.appointment_date
