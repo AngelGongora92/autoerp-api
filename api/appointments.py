@@ -15,6 +15,7 @@ from .schemas.appointments import (
     AppointmentItemResponse,
     TimeSlotAvailability,
     AppointmentConfirmRequest,
+    AppointmentFormalize,
 )
 from .schemas.orders import CreatedOrderFromAppointmentResponse
 from sqlalchemy.orm import joinedload, Session
@@ -667,6 +668,54 @@ async def get_appointment_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cita no encontrada o no pertenece a la empresa.",
         )
+    return appointment
+
+
+@router.patch("/{appointment_id}/formalize", response_model=AppointmentResponse)
+async def formalize_appointment(
+    appointment_id: int,
+    payload: AppointmentFormalize,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Asigna un cliente y un vehículo persistentes a una cita con datos temporales (AUT-242).
+    """
+    stmt = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.status),
+            joinedload(Appointment.items).joinedload(AppointmentItem.reason),
+            joinedload(Appointment.customer),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.color),
+            joinedload(Appointment.vehicle).joinedload(Vehicle.model).joinedload(Model.make)
+        )
+        .where(
+            Appointment.appointment_id == appointment_id,
+            Appointment.company_id == current_user.company_id,
+        )
+    )
+    appointment = db.execute(stmt).scalars().unique().first()
+    if not appointment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cita no encontrada o no pertenece a la empresa.",
+        )
+
+    # Validar que el cliente exista en la empresa
+    customer = db.scalar(select(Customer).where(Customer.customer_id == payload.customer_id, Customer.company_id == current_user.company_id))
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El cliente indicado no existe.")
+
+    # Validar que el vehículo exista
+    vehicle = db.scalar(select(Vehicle).where(Vehicle.vehicle_id == payload.vehicle_id))
+    if not vehicle:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El vehículo indicado no existe.")
+
+    appointment.customer_id = payload.customer_id
+    appointment.vehicle_id = payload.vehicle_id
+    db.commit()
+    db.refresh(appointment)
     return appointment
 
 
