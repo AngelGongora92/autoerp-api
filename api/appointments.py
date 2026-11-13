@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 from sqlalchemy import select, func
-from api.database import get_db, Appointment, AppointmentItem, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, CompanySettings, Employee, Order, OrderItem
+from api.database import get_db, Appointment, AppointmentItem, AppointmentReason, AppointmentStatus, Vehicle, Model, Customer, User, Company, CompanySettings, Employee, Order, OrderItem
 from api.auth_deps import get_current_user
 from .schemas.appointments import (
     AppointmentCreate,
@@ -16,6 +16,10 @@ from .schemas.appointments import (
     TimeSlotAvailability,
     AppointmentConfirmRequest,
     AppointmentFormalize,
+    PublicAppointmentConfigResponse,
+    PublicAppointmentAvailabilityResponse,
+    PublicAppointmentCreate,
+    PublicAppointmentCreateResponse,
 )
 from .schemas.orders import CreatedOrderFromAppointmentResponse
 from sqlalchemy.orm import joinedload, Session
@@ -281,15 +285,37 @@ async def get_appointments(
     return appointments
 
 
-@router.get("/availability", response_model=List[TimeSlotAvailability])
-async def get_appointment_availability(
-    date: dt_module.date,
-    assigned_to: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def check_public_portal_enabled(company_id: int, db: Session):
     """
-    Consulta la disponibilidad de horarios para una fecha dada y opcionalmente un asesor.
+    Verifica que el taller exista, esté activo y tenga habilitado el portal público de citas.
+    """
+    company = db.query(Company).filter(
+        Company.company_id == company_id,
+        Company.is_active == True
+    ).first()
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado o inactivo."
+        )
+
+    settings = db.query(CompanySettings).filter(CompanySettings.id == 1).first()
+    if not settings or not bool(getattr(settings, 'public_portal_enabled', False)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El portal público de citas se encuentra deshabilitado para este taller."
+        )
+    return company, settings
+
+
+def compute_availability_slots(
+    company_id: int,
+    date: dt_module.date,
+    assigned_to: Optional[int],
+    db: Session,
+) -> List[TimeSlotAvailability]:
+    """
+    Calcula la disponibilidad de franjas horarias para una fecha y empresa dada.
     """
     settings = db.query(CompanySettings).filter(CompanySettings.id == 1).first()
 
@@ -303,12 +329,11 @@ async def get_appointment_availability(
     local_tz = ZoneInfo("America/Mexico_City")
     is_day_allowed = date.weekday() in allowed_days
 
-    # Lista de asesores de la empresa
     all_advisors = []
     if not assigned_to:
         adv_query = select(Employee).where(
             Employee.is_active == True,
-            Employee.company_id == current_user.company_id,
+            Employee.company_id == company_id,
             Employee.position_id == 1
         )
         all_advisors = db.scalars(adv_query).all()
@@ -316,7 +341,7 @@ async def get_appointment_availability(
             all_advisors = db.scalars(
                 select(Employee).where(
                     Employee.is_active == True,
-                    Employee.company_id == current_user.company_id
+                    Employee.company_id == company_id
                 )
             ).all()
 
@@ -364,6 +389,19 @@ async def get_appointment_availability(
         current_min += slot_duration
 
     return slots
+
+
+@router.get("/availability", response_model=List[TimeSlotAvailability])
+async def get_appointment_availability(
+    date: dt_module.date,
+    assigned_to: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Consulta la disponibilidad de horarios para una fecha dada y opcionalmente un asesor.
+    """
+    return compute_availability_slots(current_user.company_id, date, assigned_to, db)
 
 
 @router.post("/new-appointment/", response_model=AppointmentResponse)
@@ -568,6 +606,166 @@ async def delete_appointment_reason(
     db.delete(reason_obj)
     db.commit()
     return {"message": "Tipo de cita eliminado exitosamente."}
+
+
+# --- Endpoints Públicos de Agendamiento (AUT-245) ---
+
+@router.get("/public/config", response_model=PublicAppointmentConfigResponse)
+async def get_public_appointment_config(
+    company_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Obtiene la configuración pública del taller y motivos disponibles si el portal está habilitado.
+    """
+    company, settings = check_public_portal_enabled(company_id, db)
+    reasons = db.scalars(
+        select(AppointmentReason).order_by(AppointmentReason.reason_id)
+    ).all()
+
+    allowed_days = settings.allowed_days if settings.allowed_days is not None else [0, 1, 2, 3, 4, 5]
+    return PublicAppointmentConfigResponse(
+        company_id=company.company_id,
+        company_name=settings.company_name or company.name,
+        public_portal_enabled=True,
+        allowed_days=allowed_days,
+        slot_duration_minutes=settings.slot_duration_minutes or 30,
+        reasons=reasons,
+    )
+
+
+@router.get("/public/availability", response_model=PublicAppointmentAvailabilityResponse)
+async def get_public_appointment_availability(
+    company_id: int,
+    date: dt_module.date,
+    db: Session = Depends(get_db),
+):
+    """
+    Consulta los horarios disponibles públicos para una fecha y taller si el portal está habilitado.
+    """
+    check_public_portal_enabled(company_id, db)
+    slots = compute_availability_slots(company_id, date, None, db)
+    available_slots = [s.time_slot for s in slots if s.is_available]
+    return PublicAppointmentAvailabilityResponse(
+        date=date.isoformat(),
+        available_slots=available_slots,
+        slots_detail=slots,
+    )
+
+
+@router.post("/public", response_model=PublicAppointmentCreateResponse, status_code=status.HTTP_201_CREATED)
+async def create_public_appointment(
+    payload: PublicAppointmentCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Crea una nueva cita pública con datos temporales (sin requerir autenticación).
+    """
+    company, settings = check_public_portal_enabled(payload.company_id, db)
+
+    if not payload.reason_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debes seleccionar al menos un motivo o servicio."
+        )
+
+    reasons = db.scalars(
+        select(AppointmentReason).where(AppointmentReason.reason_id.in_(payload.reason_ids))
+    ).all()
+    if len(reasons) != len(set(payload.reason_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uno o más motivos seleccionados no son válidos."
+        )
+
+    local_tz = ZoneInfo("America/Mexico_City")
+    appt_date = payload.appointment_date
+    if appt_date.tzinfo is None:
+        appt_date_local = appt_date.replace(tzinfo=local_tz)
+        appt_date_utc = appt_date_local.astimezone(dt_module.timezone.utc)
+    else:
+        appt_date_utc = appt_date.astimezone(dt_module.timezone.utc)
+        appt_date_local = appt_date_utc.astimezone(local_tz)
+
+    now_utc = datetime.now(dt_module.timezone.utc)
+    if appt_date_utc < now_utc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pueden agendar citas en el pasado."
+        )
+
+    # Validar día permitido y rango horario
+    if settings.allowed_days is not None and isinstance(settings.allowed_days, list):
+        if appt_date_local.weekday() not in settings.allowed_days:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El día seleccionado no está habilitado para agendar citas."
+            )
+
+    local_time = appt_date_local.time()
+    if settings.appointment_start_time and local_time < settings.appointment_start_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"La hora de la cita debe ser a partir de las {settings.appointment_start_time.strftime('%H:%M')}."
+        )
+    if settings.appointment_end_time and local_time > settings.appointment_end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"La hora de la cita debe ser anterior a las {settings.appointment_end_time.strftime('%H:%M')}."
+        )
+
+    reasons_duration = sum((r.duration_minutes or 0) for r in reasons)
+    duration_minutes = reasons_duration if reasons_duration > 0 else (settings.slot_duration_minutes or 30)
+
+    final_assigned_to = get_least_busy_available_advisor(
+        appt_date_utc, duration_minutes, company.company_id, db
+    )
+    if not final_assigned_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay asesores disponibles en el horario seleccionado."
+        )
+
+    new_appointment = Appointment(
+        company_id=company.company_id,
+        customer_id=None,
+        contact_id=None,
+        vehicle_id=None,
+        assigned_to=final_assigned_to,
+        status_id=1,  # Sin confirmar
+        appointment_date=appt_date_utc,
+        duration_minutes=duration_minutes,
+        temp_fname=payload.temp_fname.strip(),
+        temp_lname=payload.temp_lname.strip(),
+        temp_cname=payload.temp_cname.strip() if payload.temp_cname else None,
+        temp_phone=payload.temp_phone.strip(),
+        temp_email=payload.temp_email.strip(),
+        temp_vehicle_data=payload.temp_vehicle_data.model_dump(),
+        notes=payload.notes.strip() if payload.notes else None,
+        items=[AppointmentItem(reason_id=rid, notes=None) for rid in payload.reason_ids],
+    )
+
+    db.add(new_appointment)
+    db.commit()
+    db.refresh(new_appointment)
+
+    # Notificar de forma segura sin bloquear la respuesta si faltan credenciales externas
+    try:
+        await notify_appointment_confirmation(
+            new_appointment,
+            bool(new_appointment.temp_phone),
+            bool(new_appointment.temp_email),
+            db,
+        )
+    except Exception as notify_err:
+        print(f"Warning: public appointment notification error: {notify_err}")
+
+    return PublicAppointmentCreateResponse(
+        appointment_id=new_appointment.appointment_id,
+        message="Cita agendada exitosamente",
+        status="Sin confirmar",
+        appointment_date=new_appointment.appointment_date,
+    )
 
 
 @router.get("/public/{appointment_id}", response_model=AppointmentResponse)

@@ -53,10 +53,17 @@ def get_appointment_config(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Obtiene los parámetros de configuración de citas (horarios, duración y días permitidos).
+    Obtiene los parámetros de configuración de citas (horarios, duración, días permitidos y portal público).
     """
     settings = get_or_create_settings(db)
-    return settings
+    return AppointmentConfigSchema(
+        company_id=current_user.company_id,
+        appointment_start_time=settings.appointment_start_time,
+        appointment_end_time=settings.appointment_end_time,
+        slot_duration_minutes=settings.slot_duration_minutes,
+        allowed_days=settings.allowed_days,
+        public_portal_enabled=bool(getattr(settings, 'public_portal_enabled', False))
+    )
 
 @router.put("/appointment-config", response_model=AppointmentConfigSchema)
 def update_appointment_config(
@@ -68,10 +75,17 @@ def update_appointment_config(
     Actualiza la configuración de agendamiento de citas de la empresa.
     """
     settings = get_or_create_settings(db)
-    update_data = config_data.model_dump(exclude_unset=True)
+    update_data = config_data.model_dump(exclude_unset=True, exclude={'company_id'})
     for key, value in update_data.items():
         setattr(settings, key, value)
     
     db.commit()
     db.refresh(settings)
-    return settings
+    return AppointmentConfigSchema(
+        company_id=current_user.company_id,
+        appointment_start_time=settings.appointment_start_time,
+        appointment_end_time=settings.appointment_end_time,
+        slot_duration_minutes=settings.slot_duration_minutes,
+        allowed_days=settings.allowed_days,
+        public_portal_enabled=bool(getattr(settings, 'public_portal_enabled', False))
+    )
