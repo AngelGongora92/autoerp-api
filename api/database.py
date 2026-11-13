@@ -480,6 +480,7 @@ class CompanySettings(Base):
     appointment_end_time = Column(Time, nullable=True)
     slot_duration_minutes = Column(Integer, default=30, server_default='30', nullable=True)
     allowed_days = Column(JSONB, nullable=True, server_default='[0, 1, 2, 3, 4, 5]')
+    public_portal_enabled = Column(Boolean, default=False, server_default='false', nullable=False)
 
 
 

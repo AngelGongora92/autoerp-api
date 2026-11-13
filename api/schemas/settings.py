@@ -16,6 +16,7 @@ class CompanySettingsBase(BaseModel):
     appointment_end_time: Optional[time] = None
     slot_duration_minutes: Optional[int] = 30
     allowed_days: Optional[List[int]] = [0, 1, 2, 3, 4, 5]
+    public_portal_enabled: Optional[bool] = False
 
 class CompanySettingsUpdate(CompanySettingsBase):
     pass
@@ -26,7 +27,9 @@ class CompanySettingsResponse(CompanySettingsBase):
 
 class AppointmentConfigSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    company_id: Optional[int] = None
     appointment_start_time: Optional[time] = None
     appointment_end_time: Optional[time] = None
     slot_duration_minutes: Optional[int] = 30
     allowed_days: Optional[List[int]] = [0, 1, 2, 3, 4, 5]
+    public_portal_enabled: Optional[bool] = False

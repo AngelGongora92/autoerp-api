@@ -104,3 +104,49 @@ class AppointmentReasonCreate(BaseModel):
 class AppointmentReasonUpdate(BaseModel):
     reason: Optional[str] = None
     duration_minutes: Optional[int] = None
+
+
+# --- Esquemas para Portal Público de Citas (AUT-245) ---
+
+class PublicVehicleTempData(BaseModel):
+    make: str
+    model: str
+    year: Optional[int] = None
+    plate: Optional[str] = None
+    color: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PublicAppointmentCreate(BaseModel):
+    company_id: int
+    appointment_date: datetime
+    reason_ids: List[int]
+    temp_fname: str
+    temp_lname: str
+    temp_cname: Optional[str] = None
+    temp_phone: str
+    temp_email: str
+    temp_vehicle_data: PublicVehicleTempData
+    notes: Optional[str] = None
+
+
+class PublicAppointmentConfigResponse(BaseModel):
+    company_id: int
+    company_name: str
+    public_portal_enabled: bool
+    allowed_days: List[int]
+    slot_duration_minutes: int
+    reasons: List[AppointmentReasonResponse]
+
+
+class PublicAppointmentAvailabilityResponse(BaseModel):
+    date: str
+    available_slots: List[str]
+    slots_detail: Optional[List[TimeSlotAvailability]] = None
+
+
+class PublicAppointmentCreateResponse(BaseModel):
+    appointment_id: int
+    message: str
+    status: str
+    appointment_date: datetime
